@@ -20,7 +20,7 @@ function save_options_ui() {
         chromePhone.init(opts);
         setTimeout(function() {
             status.textContent = '';
-        }, 1050);
+        }, 1500);
     });
 }
 
@@ -35,12 +35,6 @@ function restore_options_ui() {
             document.getElementById('sip_ice').value = opts.sip_ice;
         });
         document.getElementById('save').addEventListener('click', save_options_ui);
-        document.getElementById('defaults').addEventListener('click', function() {
-            document.getElementById('sip_server').value = '192.168.1.29';
-            document.getElementById('sip_extension').value = '500';
-            document.getElementById('sip_password').value = 'abc123';
-            document.getElementById('sip_ice').value = 'stun:192.168.1.29:3478';
-        });
     }
 }
 

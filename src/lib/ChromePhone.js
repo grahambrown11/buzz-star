@@ -150,7 +150,6 @@ function ChromePhone() {
         sip_server: '',
         sip_extension: '',
         sip_password: '',
-        sip_ice: '',
         call: undefined,
         microphone: undefined,
         mute: false,
@@ -162,11 +161,12 @@ function ChromePhone() {
         fromExternal: false,
         pcConfig: {
             rtcpMuxPolicy : 'negotiate',
-            iceServers: [] // { urls : [ 'stun:stun.l.google.com:19302' ] } { urls : [ 'stun:pbx1.differentlife.co.za:3478' ] }
+            iceServers: []
         }
     };
     let tone = new Tone(state.audioContext);
     let jssip = undefined;
+    let socket = undefined;
 
     function checkMicError(err) {
         if ('chrome' in window && chrome.extension && err.name === 'MediaDeviceFailedDueToShutdown') {
@@ -196,9 +196,11 @@ function ChromePhone() {
                 } else if (typeof msg.action !== 'undefined') {
                     if (msg.action === 'call') {
                         state.phoneNumber = msg.phoneNumber;
-                        call(true);
+                        chromePhone.call(true);
                     } else if (msg.action === 'answer' && state.call) {
-                        answer();
+                        chromePhone.answer();
+                    } else if (msg.action === 'login') {
+                        chromePhone.login(true);
                     }
                 }
             });
@@ -341,12 +343,15 @@ function ChromePhone() {
         }
         state.status = 'onhook';
         state.infoMessage = undefined;
+        state.hold = false;
+        state.mute = false;
+        state.phoneNumber = '';
+        state.dialedNumber = '';
+        state.fromExternal = false;
         if (state.microphone) {
             state.microphone.getAudioTracks()[0].stop();
             state.microphone = undefined;
         }
-        state.phoneNumber = '';
-        state.fromExternal = false;
         updatePopupViewStatus();
         if (state.notificationId)
             chrome.notifications.clear(state.notificationId);
@@ -419,13 +424,13 @@ function ChromePhone() {
             logger.debug('already had a jssip, stopping 1st...');
             jssip.stop();
         }
+        state.errorMessage = undefined;
         state.sip_server = opts.sip_server;
         state.sip_extension = opts.sip_extension;
         state.sip_password = opts.sip_password;
+        state.pcConfig.iceServers = [];
         if (opts.sip_ice) {
-            state.pcConfig.iceServers = [];
-            state.sip_ice = opts.sip_ice;
-            let servers = state.sip_ice.split(',');
+            let servers = opts.sip_ice.split(',');
             for (let i=0; i < servers.length; i++) {
                 state.pcConfig.iceServers.push({urls: [servers[i]]});
             }
@@ -435,7 +440,7 @@ function ChromePhone() {
             logger.error('Missing settings');
             return;
         }
-        let socket = new JsSIP.WebSocketInterface('wss://' + state.sip_server + ':8089/ws');
+        socket = new JsSIP.WebSocketInterface('wss://' + state.sip_server + ':8089/ws');
         let configuration = {
             sockets: [socket],
             uri: 'sip:' + state.sip_extension + '@' + state.sip_server,
@@ -507,6 +512,8 @@ function ChromePhone() {
         });
         // NOTE: skipping registrationExpiring event so JsSIP handles re-register
         logger.debug('jssip created');
+        // TODO timer to check socket still connected ...
+        // TODO maybe add chrome idle ... auto logout if idle too long...
     };
 
     this.login = function(external) {
@@ -536,10 +543,10 @@ function ChromePhone() {
             showError("No Phone Number");
             return;
         }
-        state.errorMessage = undefined;
-        state.fromExternal = external;
-        state.infoMessage = 'Calling ' + state.phoneNumber + ' ...';
-        offhook();
+        if (external && !state.loggedIn) {
+            notifyExternalOfError("Not Logged In");
+            return;
+        }
         // call events
         let eventHandlers = {
             connecting: function() {
@@ -605,7 +612,12 @@ function ChromePhone() {
             }
 
         };
-        state.call = jssip.call('sip:' + state.phoneNumber + '@' + state.sip_server, {
+        state.errorMessage = undefined;
+        state.fromExternal = external;
+        state.dialedNumber = state.phoneNumber;
+        state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
+        offhook();
+        state.call = jssip.call('sip:' + state.dialedNumber + '@' + state.sip_server, {
             eventHandlers: eventHandlers,
             mediaConstraints: { 'audio': true, 'video': false },
             rtcOfferConstraints: {
@@ -614,7 +626,6 @@ function ChromePhone() {
             },
             pcConfig: state.pcConfig
         });
-        state.dialedNumber = state.phoneNumber;
     };
 
     this.answer = function() {
@@ -706,7 +717,6 @@ function ChromePhone() {
     this.isOnCall = function() {
         return state.status === 'offhook' && state.call;
     };
-
 
 }
 

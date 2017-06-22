@@ -8,6 +8,8 @@ const rename = require('gulp-rename');
 const browserify = require('browserify');
 const babelify = require("babelify");
 const del = require('del');
+const zip = require('gulp-zip');
+
 
 const OUTPUT_DIR = 'chrome-phone';
 let debug = true;
@@ -32,7 +34,7 @@ gulp.task('bundle', ['copy'], () => {
         debug: debug
     })
     .transform(babelify.configure({
-        presets: ["es2015"]
+        presets: ['es2015']
     }))
     .bundle().on('error', (e) => {
         gutil.log(e);
@@ -46,13 +48,18 @@ gulp.task('default', ['bundle'], (cb) => {
     cb();
 });
 
-gulp.task("debug-off",  (cb) => {
-    gutil.log("Turn debug off");
+gulp.task('debug-off',  (cb) => {
+    gutil.log('Turn debug off');
     debug = false;
     cb();
 });
 
-gulp.task("prod", ["debug-off", "bundle"], () => {
-    gutil.log('complete!');
+gulp.task('zip', ['bundle'], () => {
+    gulp.src(OUTPUT_DIR + '/**', {dot: true})
+    .pipe(zip('chrome-phone.zip'))
+    .pipe(gulp.dest("."));
 });
 
+gulp.task('prod', ['debug-off', 'zip'], () => {
+    gutil.log('complete!');
+});

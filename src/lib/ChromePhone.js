@@ -368,8 +368,12 @@ function ChromePhone() {
     }
 
     function notifyExternalOfError() {
+        notifyExternal({error: state.errorMessage});
+    }
+
+    function notifyExternal(msg) {
         if (state.fromExternal && state.sidebarPort) {
-            state.sidebarPort.postMessage({'error': state.errorMessage});
+            state.sidebarPort.postMessage(msg);
         }
     }
 
@@ -539,12 +543,13 @@ function ChromePhone() {
     };
 
     this.call = function(external) {
+        state.fromExternal = external;
         if (!state.phoneNumber) {
             showError("No Phone Number");
             return;
         }
         if (external && !state.loggedIn) {
-            notifyExternalOfError("Not Logged In");
+            notifyExternal({error: 'Not Logged In'});
             return;
         }
         // call events
@@ -613,7 +618,6 @@ function ChromePhone() {
 
         };
         state.errorMessage = undefined;
-        state.fromExternal = external;
         state.dialedNumber = state.phoneNumber;
         state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
         offhook();

@@ -1,0 +1,25 @@
+{
+  "name": "dl-chrome-phone",
+  "version": "0.9.0",
+  "private": true,
+  "description": "Different Chrome Phone",
+  "author": "Graham Brown",
+  "license": "",
+  "main": "lib/ChromePhone.js",
+  "dependencies": {
+    "babel-runtime": "^6.23.0",
+    "classnames": "^2.2.5",
+    "debug": "~2.6.2",
+    "jssip": "^3.0.13"
+  },
+  "devDependencies": {
+    "babelify": "^7.3.0",
+    "babel-preset-es2015": "^6.24.1",
+    "browserify": "^14.1.0",
+    "del": "^2.2.2",
+    "gulp": "^3.9.0",
+    "gulp-rename": "^1.2.2",
+    "gulp-util": "^3.0.6",
+    "vinyl-source-stream": "^1.1.0"
+  }
+}

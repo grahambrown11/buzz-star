@@ -1,0 +1,5 @@
+.DS_Store
+.idea/
+chrome-phone/
+node_modules/
+chrome-phone.crx

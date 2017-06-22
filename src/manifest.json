@@ -1,0 +1,30 @@
+{
+  "manifest_version": 2,
+  "name": "Different Chrome Phone",
+  "description": "Different Chrome Phone",
+  "version": "0.9.0",
+  "permissions": [
+    "storage",
+    "background",
+    "notifications"
+  ],
+  "background": {
+    "scripts": ["options.js", "chrome-phone.js"]
+  },
+  "icons": {
+    "64": "img/phone-blank.png"
+  },
+  "browser_action": {
+    "default_icon": "img/phone-blank.png",
+    "default_title": "Different Chrome Phone",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "chrome_style": true
+  },
+  "incognito": "not_allowed",
+  "externally_connectable": {
+    "matches": ["*://*.differentlife.co.za/*"]
+  }
+}

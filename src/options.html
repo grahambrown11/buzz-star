@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Options | Different Chrome Phone</title>
+    <style>
+        #options {
+            padding: 10px;
+        }
+        .option {
+            margin-bottom: 5px;
+        }
+        .option label {
+            width: 105px;
+            display: inline-block;
+            text-align: right;
+        }
+        .option input {
+            width: 200px;
+        }
+        #status {
+            margin-left: 5px;
+        }
+        a {
+            text-decoration: none;
+        }
+    </style>
+    <script src="options.js"></script>
+</head>
+
+<body>
+<div id="options">
+    <div class="option">
+        <label for="sip_server">SIP Server:</label>
+        <input id="sip_server" type="text">
+    </div>
+    <div class="option">
+        <label for="sip_extension">SIP Extension:</label>
+        <input id="sip_extension" type="text">
+    </div>
+    <div class="option">
+        <label for="sip_password">SIP Password:</label>
+        <input id="sip_password" type="password">
+    </div>
+    <div class="option">
+        <label for="sip_ice">ICE (STUN/TURN Servers):</label>
+        <input id="sip_ice" type="text">
+    </div>
+    <div class="option">
+        <button id="save">Save</button>
+        <span id="status"></span>
+    </div>
+    <div class="option">
+        <a id="defaults">defaults</a>
+    </div>
+</div>
+
+</body>
+</html>

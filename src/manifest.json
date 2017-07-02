@@ -2,11 +2,12 @@
   "manifest_version": 2,
   "name": "Different Chrome Phone",
   "description": "Different Chrome Phone",
-  "version": "0.9.1",
+  "version": "$$version$$",
   "permissions": [
     "storage",
     "background",
-    "notifications"
+    "notifications",
+    "idle"
   ],
   "background": {
     "scripts": ["options.js", "chrome-phone.js"]

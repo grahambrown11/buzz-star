@@ -9,7 +9,8 @@ const browserify = require('browserify');
 const babelify = require("babelify");
 const del = require('del');
 const zip = require('gulp-zip');
-
+const replace = require('gulp-replace');
+const pkg = require('./package.json');
 
 const OUTPUT_DIR = 'chrome-phone';
 let debug = true;
@@ -20,7 +21,7 @@ gulp.task('copy', ['clean'], () => {
     return gulp.src([
         'src/*.js',
         'src/*.html',
-        'src/manifest.json',
+//        'src/manifest.json',
         'src/css/**',
         'src/fonts/**',
         'src/img/**'
@@ -28,7 +29,14 @@ gulp.task('copy', ['clean'], () => {
         .pipe(gulp.dest(OUTPUT_DIR));
 });
 
-gulp.task('bundle', ['copy'], () => {
+gulp.task('manifest', ['copy'], () => {
+    gutil.log('pkg.version: ' + pkg.version);
+    gulp.src(['src/manifest.json'])
+        .pipe(replace('$$version$$', pkg.version))
+        .pipe(gulp.dest(OUTPUT_DIR));
+});
+
+gulp.task('bundle', ['manifest'], () => {
     return browserify({
         entries: ['src/lib/ChromePhone.js'],
         debug: debug

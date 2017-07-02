@@ -5,135 +5,6 @@ import JsSIP from 'jssip';
 window.localStorage.setItem('debug', '*');
 JsSIP.debug.enable('JsSIP:*');
 
-function Tone(context) {
-
-    /**
-     * AudioContext
-     */
-    this.context = context;
-
-    this.status = 0;
-    this.ringing = 0;
-
-    var dtmfFrequencies = {
-        "1": {f1: 697, f2: 1209},
-        "2": {f1: 697, f2: 1336},
-        "3": {f1: 697, f2: 1477},
-        "4": {f1: 770, f2: 1209},
-        "5": {f1: 770, f2: 1336},
-        "6": {f1: 770, f2: 1477},
-        "7": {f1: 852, f2: 1209},
-        "8": {f1: 852, f2: 1336},
-        "9": {f1: 852, f2: 1477},
-        "*": {f1: 941, f2: 1209},
-        "0": {f1: 941, f2: 1336},
-        "#": {f1: 941, f2: 1477}
-    };
-
-    this.start = function (freq1, freq2) {
-        if (this.status === 1) return;
-        this.osc1 = this.context.createOscillator();
-        this.osc2 = this.context.createOscillator();
-        this.gainNode = this.context.createGain();
-        this.gainNode.gain.value = 0.25;
-        this.filter = this.context.createBiquadFilter();
-        this.filter.type = "lowpass";
-        this.filter.frequency.value = 8000;
-        this.osc1.connect(this.gainNode);
-        this.osc2.connect(this.gainNode);
-        this.gainNode.connect(this.filter);
-        this.filter.connect(this.context.destination);
-        this.osc1.frequency.value = freq1;
-        this.osc2.frequency.value = freq2;
-        this.osc1.start(0);
-        this.osc2.start(0);
-        this.status = 1;
-    };
-
-    this.stop = function () {
-        this.osc1.stop(0);
-        this.osc2.stop(0);
-        this.status = 0;
-    };
-
-    this.startDTMF = function (value) {
-        if (this.ringing === 1) return;
-        this.start(dtmfFrequencies[value].f1, dtmfFrequencies[value].f2);
-    };
-
-    this.stopDTMF = function () {
-        if (this.ringing === 1) return;
-        this.stop();
-    };
-
-    this.createRingerLFO = function () {
-        // Create an empty 3 second mono buffer at the
-        // sample rate of the AudioContext
-        var channels = 1;
-        var sampleRate = this.context.sampleRate;
-        var frameCount = sampleRate * 3;
-        var arrayBuffer = this.context.createBuffer(channels, frameCount, sampleRate);
-
-        // getChannelData allows us to access and edit the buffer data and change.
-        var bufferData = arrayBuffer.getChannelData(0);
-        for (var i = 0; i < frameCount; i++) {
-            // if the sample lies between 0 and 0.4 seconds, or 0.6 and 1 second, we want it to be on.
-            if ((i / sampleRate > 0 && i / sampleRate < 0.4) || (i / sampleRate > 0.6 && i / sampleRate < 1.0)) {
-                bufferData[i] = 0.25;
-            }
-        }
-
-        this.ringerLFOBuffer = arrayBuffer;
-    };
-
-    this.startRinging = function () {
-        this.start(400, 450);
-        this.ringing = 1;
-        // set our gain node to 0, because the LFO is calibrated to this level
-        this.gainNode.gain.value = 0;
-
-        this.createRingerLFO();
-
-        this.ringerLFOSource = this.context.createBufferSource();
-        this.ringerLFOSource.buffer = this.ringerLFOBuffer;
-        this.ringerLFOSource.loop = true;
-        // connect the ringerLFOSource to the gain Node audio param
-        this.ringerLFOSource.connect(this.gainNode.gain);
-        this.ringerLFOSource.start(0);
-    };
-
-    this.stopRinging = function () {
-        if (this.ringing === 1) {
-            this.stop();
-            this.ringing = 0;
-            this.ringerLFOSource.stop(0);
-        }
-    };
-
-    this.boopBoop = function () {
-        this.start(400, 400);
-        var tone = this;
-        setTimeout(function () {
-            tone.stop();
-            setTimeout(function () {
-                tone.start(400, 400);
-                setTimeout(function () {
-                    tone.stop();
-                }, 250);
-            }, 200);
-        }, 250);
-    };
-
-    this.beep = function () {
-        this.start(1046, 1046);
-        var tone = this;
-        setTimeout(function () {
-            tone.stop();
-        }, 200);
-    };
-
-}
-
 function ChromePhone() {
 
     let logger = new Logger();
@@ -141,6 +12,7 @@ function ChromePhone() {
 
     let state = {
         loggedIn: false,
+        previouslyLoggedIn: false,
         phoneNumber: '',
         dialedNumber: undefined,
         status: 'offline',
@@ -162,7 +34,12 @@ function ChromePhone() {
         pcConfig: {
             rtcpMuxPolicy : 'negotiate',
             iceServers: []
-        }
+        },
+        audioInputs: [],
+        audioInput: undefined,
+        audioInputId: undefined,
+        audioOutputs: [],
+        audioOutputId: undefined,
     };
     let tone = new Tone(state.audioContext);
     let jssip = undefined;
@@ -422,19 +299,30 @@ function ChromePhone() {
         }
     }
 
-    this.init = function (opts) {
-        logger.debug('init(opts:%o)', opts);
+    this.init = function (sync_opts, local_opts) {
+        logger.debug('init(sync_opts:%o, local_opts:%o)', sync_opts, local_opts);
         if (jssip) {
             logger.debug('already had a jssip, stopping 1st...');
             jssip.stop();
         }
         state.errorMessage = undefined;
-        state.sip_server = opts.sip_server;
-        state.sip_extension = opts.sip_extension;
-        state.sip_password = opts.sip_password;
+        state.sip_server = sync_opts.sip_server;
+        state.sip_extension = sync_opts.sip_extension;
+        state.sip_password = sync_opts.sip_password;
+        if (local_opts) {
+            if (local_opts.media_input) {
+                state.audioInputId = local_opts.media_input;
+                this.setAudioInput(local_opts.media_input);
+            }
+            if (local_opts.media_output) {
+                state.audioOutputId = local_opts.media_output;
+                this.setAudioOutput(local_opts.media_output);
+            }
+        }
+
         state.pcConfig.iceServers = [];
-        if (opts.sip_ice) {
-            let servers = opts.sip_ice.split(',');
+        if (sync_opts.sip_ice) {
+            let servers = sync_opts.sip_ice.split(',');
             for (let i=0; i < servers.length; i++) {
                 state.pcConfig.iceServers.push({urls: [servers[i]]});
             }
@@ -516,9 +404,44 @@ function ChromePhone() {
         });
         // NOTE: skipping registrationExpiring event so JsSIP handles re-register
         logger.debug('jssip created');
-        // TODO timer to check socket still connected ...
-        // TODO maybe add chrome idle ... auto logout if idle too long...
+        // get a list of media devices and listen for changes
+        updateDeviceList();
+        navigator.mediaDevices.ondevicechange = function(e) {
+            updateDeviceList();
+        };
+        chrome.idle.setDetectionInterval(15 * 60);
+        chrome.idle.onStateChanged.addListener(function(newState) {
+            logger.debug('idle state change: %s', newState);
+            if ((newState === 'idle' || newState === 'locked') && state.loggedIn) {
+                state.previouslyLoggedIn = state.loggedIn;
+                chromePhone.logout();
+            } else if (newState === 'active' && state.previouslyLoggedIn && !state.loggedIn) {
+                chromePhone.login(false);
+            }
+        });
     };
+
+    function updateDeviceList() {
+        navigator.mediaDevices.enumerateDevices().then(function(devices) {
+            let audioInputs = [];
+            let audioOutputs = [];
+            let audioInput, audioOutput;
+            for (let i = 0; i !== devices.length; ++i) {
+                logger.debug('media device %s: %o', i, devices[i]);
+                if (devices[i].kind === 'audioinput') {
+                    audioInputs.push({id: devices[i].deviceId, name: devices[i].label || 'microphone ' + (state.audioSources.length + 1)});
+                    if (state.audioInputId === devices[i].deviceId) audioInput = devices[i].deviceId;
+                } else if (devices[i].kind === 'audiooutput') {
+                    audioOutputs.push({id: devices[i].deviceId, name: devices[i].label || 'speaker ' + (state.audioOutputs.length + 1)});
+                    if (state.audioOutputId === devices[i].deviceId) audioOutput = devices[i].deviceId;
+                }
+            }
+            state.audioInputs = audioInputs;
+            state.audioOutputs = audioOutputs;
+            chromePhone.setAudioInput(audioInput);
+            chromePhone.setAudioOutput(audioOutput);
+        });
+    }
 
     this.login = function(external) {
         logger.debug('login(external:%s)', external);
@@ -530,6 +453,7 @@ function ChromePhone() {
         state.errorMessage = undefined;
         state.infoMessage = undefined;
         jssip.start();
+        // TODO timer to check socket still connected (remember to cancel on logout)...
     };
 
     this.logout = function() {
@@ -623,7 +547,10 @@ function ChromePhone() {
         offhook();
         state.call = jssip.call('sip:' + state.dialedNumber + '@' + state.sip_server, {
             eventHandlers: eventHandlers,
-            mediaConstraints: { 'audio': true, 'video': false },
+            mediaConstraints: {
+                audio: {deviceId: state.audioInput ? {exact: state.audioInput} : undefined},
+                video: false
+            },
             rtcOfferConstraints: {
                 offerToReceiveAudio : 1,
                 offerToReceiveVideo : 0
@@ -722,14 +649,179 @@ function ChromePhone() {
         return state.status === 'offhook' && state.call;
     };
 
+    this.getAudioInputs = function() {
+        return state.audioInputs;
+    };
+
+    this.setAudioInput = function(deviceId) {
+        for (let i=0; i < state.audioInputs.length; i++) {
+            if (deviceId === state.audioInputs[i].id) {
+                state.audioInputId = deviceId;
+                state.audioInput = deviceId;
+                logger.debug('set audio input to %s', state.audioInput);
+                return;
+            }
+        }
+        logger.debug('default audio input');
+        state.audioInput = undefined;
+    };
+
+    this.getAudioOutputs = function() {
+        return state.audioOutputs;
+    };
+
+    this.setAudioOutput = function(deviceId) {
+        for (let i=0; i < state.audioOutputs.length; i++) {
+            if (deviceId === state.audioOutputs[i].id) {
+                state.audioOutputId = deviceId;
+                state.audioOutput.setSinkId(deviceId);
+                logger.debug('set audio output to %s', state.audioOutputId);
+                return;
+            }
+        }
+        logger.debug('default audio output');
+        state.audioOutput.setSinkId('default');
+    };
+
+}
+
+function Tone(context) {
+
+    /**
+     * AudioContext
+     */
+    this.context = context;
+
+    this.status = 0;
+    this.ringing = 0;
+
+    var dtmfFrequencies = {
+        "1": {f1: 697, f2: 1209},
+        "2": {f1: 697, f2: 1336},
+        "3": {f1: 697, f2: 1477},
+        "4": {f1: 770, f2: 1209},
+        "5": {f1: 770, f2: 1336},
+        "6": {f1: 770, f2: 1477},
+        "7": {f1: 852, f2: 1209},
+        "8": {f1: 852, f2: 1336},
+        "9": {f1: 852, f2: 1477},
+        "*": {f1: 941, f2: 1209},
+        "0": {f1: 941, f2: 1336},
+        "#": {f1: 941, f2: 1477}
+    };
+
+    this.start = function (freq1, freq2) {
+        if (this.status === 1) return;
+        this.osc1 = this.context.createOscillator();
+        this.osc2 = this.context.createOscillator();
+        this.gainNode = this.context.createGain();
+        this.gainNode.gain.value = 0.25;
+        this.filter = this.context.createBiquadFilter();
+        this.filter.type = "lowpass";
+        this.filter.frequency.value = 8000;
+        this.osc1.connect(this.gainNode);
+        this.osc2.connect(this.gainNode);
+        this.gainNode.connect(this.filter);
+        this.filter.connect(this.context.destination);
+        this.osc1.frequency.value = freq1;
+        this.osc2.frequency.value = freq2;
+        this.osc1.start(0);
+        this.osc2.start(0);
+        this.status = 1;
+    };
+
+    this.stop = function () {
+        this.osc1.stop(0);
+        this.osc2.stop(0);
+        this.status = 0;
+    };
+
+    this.startDTMF = function (value) {
+        if (this.ringing === 1) return;
+        this.start(dtmfFrequencies[value].f1, dtmfFrequencies[value].f2);
+    };
+
+    this.stopDTMF = function () {
+        if (this.ringing === 1) return;
+        this.stop();
+    };
+
+    this.createRingerLFO = function () {
+        // Create an empty 3 second mono buffer at the
+        // sample rate of the AudioContext
+        var channels = 1;
+        var sampleRate = this.context.sampleRate;
+        var frameCount = sampleRate * 3;
+        var arrayBuffer = this.context.createBuffer(channels, frameCount, sampleRate);
+
+        // getChannelData allows us to access and edit the buffer data and change.
+        var bufferData = arrayBuffer.getChannelData(0);
+        for (var i = 0; i < frameCount; i++) {
+            // if the sample lies between 0 and 0.4 seconds, or 0.6 and 1 second, we want it to be on.
+            if ((i / sampleRate > 0 && i / sampleRate < 0.4) || (i / sampleRate > 0.6 && i / sampleRate < 1.0)) {
+                bufferData[i] = 0.25;
+            }
+        }
+
+        this.ringerLFOBuffer = arrayBuffer;
+    };
+
+    this.startRinging = function () {
+        this.start(400, 450);
+        this.ringing = 1;
+        // set our gain node to 0, because the LFO is calibrated to this level
+        this.gainNode.gain.value = 0;
+
+        this.createRingerLFO();
+
+        this.ringerLFOSource = this.context.createBufferSource();
+        this.ringerLFOSource.buffer = this.ringerLFOBuffer;
+        this.ringerLFOSource.loop = true;
+        // connect the ringerLFOSource to the gain Node audio param
+        this.ringerLFOSource.connect(this.gainNode.gain);
+        this.ringerLFOSource.start(0);
+    };
+
+    this.stopRinging = function () {
+        if (this.ringing === 1) {
+            this.stop();
+            this.ringing = 0;
+            this.ringerLFOSource.stop(0);
+        }
+    };
+
+    this.boopBoop = function () {
+        this.start(400, 400);
+        var tone = this;
+        setTimeout(function () {
+            tone.stop();
+            setTimeout(function () {
+                tone.start(400, 400);
+                setTimeout(function () {
+                    tone.stop();
+                }, 250);
+            }, 200);
+        }, 250);
+    };
+
+    this.beep = function () {
+        this.start(1046, 1046);
+        var tone = this;
+        setTimeout(function () {
+            tone.stop();
+        }, 200);
+    };
+
 }
 
 window.chromePhone = new ChromePhone();
 // if a chrome extension
 if ("chrome" in window && chrome.extension) {
     if (chrome.storage) {
-        chrome.storage.sync.get(opts, function (items) {
-            window.chromePhone.init(items);
+        chrome.storage.local.get(local_opts, function (local_items) {
+            chrome.storage.sync.get(sync_opts, function (sync_items) {
+                window.chromePhone.init(sync_items, local_items);
+            });
         });
     }
 }

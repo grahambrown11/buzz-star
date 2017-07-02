@@ -17,6 +17,9 @@
         .option input {
             width: 200px;
         }
+        .option select {
+            width: 200px;
+        }
         #status {
             margin-left: 5px;
         }
@@ -44,6 +47,14 @@
     <div class="option">
         <label for="sip_ice">STUN/TURN:</label>
         <input id="sip_ice" type="text" placeholder="stun:server:3478,turn:server:3478">
+    </div>
+    <div class="option">
+        <label for="media_input">Media Input:</label>
+        <select id="media_input"></select>
+    </div>
+    <div class="option">
+        <label for="media_output">Media Output:</label>
+        <select id="media_output"></select>
     </div>
     <div class="option">
         <button id="save">Save</button>

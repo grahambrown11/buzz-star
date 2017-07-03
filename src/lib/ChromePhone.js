@@ -41,7 +41,8 @@ function ChromePhone() {
         audioOutputs: [],
         audioOutputId: undefined,
     };
-    let tone = new Tone(state.audioContext);
+    let audioDestination = state.audioContext.createMediaStreamDestination();
+    let tone = new Tone(state.audioContext, audioDestination);
     let jssip = undefined;
     let socket = undefined;
 
@@ -453,7 +454,6 @@ function ChromePhone() {
         state.errorMessage = undefined;
         state.infoMessage = undefined;
         jssip.start();
-        // TODO timer to check socket still connected (remember to cancel on logout)...
     };
 
     this.logout = function() {
@@ -675,12 +675,14 @@ function ChromePhone() {
             if (deviceId === state.audioOutputs[i].id) {
                 state.audioOutputId = deviceId;
                 state.audioOutput.setSinkId(deviceId);
+                tone.setAudioSinkId(deviceId);
                 logger.debug('set audio output to %s', state.audioOutputId);
                 return;
             }
         }
         logger.debug('default audio output');
         state.audioOutput.setSinkId('default');
+        tone.setAudioSinkId('default');
     };
 
 }
@@ -692,10 +694,15 @@ function Tone(context) {
      */
     this.context = context;
 
+    this.destination = this.context.createMediaStreamDestination();
+    this.audioOutput = new Audio();
+    this.audioOutput.srcObject = this.destination.stream;
+    this.audioOutput.play();
+
     this.status = 0;
     this.ringing = 0;
 
-    var dtmfFrequencies = {
+    let dtmfFrequencies = {
         "1": {f1: 697, f2: 1209},
         "2": {f1: 697, f2: 1336},
         "3": {f1: 697, f2: 1477},
@@ -710,6 +717,10 @@ function Tone(context) {
         "#": {f1: 941, f2: 1477}
     };
 
+    this.setAudioSinkId = function(deviceId) {
+        this.audioOutput.setSinkId(deviceId);
+    };
+
     this.start = function (freq1, freq2) {
         if (this.status === 1) return;
         this.osc1 = this.context.createOscillator();
@@ -722,7 +733,7 @@ function Tone(context) {
         this.osc1.connect(this.gainNode);
         this.osc2.connect(this.gainNode);
         this.gainNode.connect(this.filter);
-        this.filter.connect(this.context.destination);
+        this.filter.connect(this.destination);
         this.osc1.frequency.value = freq1;
         this.osc2.frequency.value = freq2;
         this.osc1.start(0);
@@ -749,14 +760,14 @@ function Tone(context) {
     this.createRingerLFO = function () {
         // Create an empty 3 second mono buffer at the
         // sample rate of the AudioContext
-        var channels = 1;
-        var sampleRate = this.context.sampleRate;
-        var frameCount = sampleRate * 3;
-        var arrayBuffer = this.context.createBuffer(channels, frameCount, sampleRate);
+        let channels = 1;
+        let sampleRate = this.context.sampleRate;
+        let frameCount = sampleRate * 3;
+        let arrayBuffer = this.context.createBuffer(channels, frameCount, sampleRate);
 
         // getChannelData allows us to access and edit the buffer data and change.
-        var bufferData = arrayBuffer.getChannelData(0);
-        for (var i = 0; i < frameCount; i++) {
+        let bufferData = arrayBuffer.getChannelData(0);
+        for (let i = 0; i < frameCount; i++) {
             // if the sample lies between 0 and 0.4 seconds, or 0.6 and 1 second, we want it to be on.
             if ((i / sampleRate > 0 && i / sampleRate < 0.4) || (i / sampleRate > 0.6 && i / sampleRate < 1.0)) {
                 bufferData[i] = 0.25;
@@ -784,15 +795,22 @@ function Tone(context) {
 
     this.stopRinging = function () {
         if (this.ringing === 1) {
+            this.ringerLFOSource.stop(0);
+            this.ringerLFOSource.disconnect();
             this.stop();
             this.ringing = 0;
-            this.ringerLFOSource.stop(0);
         }
     };
 
     this.boopBoop = function () {
+        // wait for ringing to stop 1st
+        if (this.ringing === 1) {
+            this.stopRinging();
+            setTimeout(this.boopBoop(), 5);
+            return;
+        }
         this.start(400, 400);
-        var tone = this;
+        let tone = this;
         setTimeout(function () {
             tone.stop();
             setTimeout(function () {
@@ -806,7 +824,7 @@ function Tone(context) {
 
     this.beep = function () {
         this.start(1046, 1046);
-        var tone = this;
+        let tone = this;
         setTimeout(function () {
             tone.stop();
         }, 200);

@@ -119,10 +119,6 @@ function ChromePhone() {
             onhook();
             if (state.notificationId)
                 chrome.notifications.clear(state.notificationId);
-            // stop ringing
-            setTimeout(function() {
-                tone.stopRinging();
-            }, 50);
         });
         state.call.on('ended', function(e) {
             logger.debug('ended');
@@ -184,8 +180,6 @@ function ChromePhone() {
             logger.debug('setOutputStream(%o)', stream);
             state.audioOutput.srcObject = stream;
             state.audioOutput.play();
-            // let mediaStreamSource = state.audioContext.createMediaStreamSource(event.stream);
-            // mediaStreamSource.connect(state.audioContext.destination);
         }
     }
 
@@ -313,14 +307,11 @@ function ChromePhone() {
         if (local_opts) {
             if (local_opts.media_input) {
                 state.audioInputId = local_opts.media_input;
-                this.setAudioInput(local_opts.media_input);
             }
             if (local_opts.media_output) {
                 state.audioOutputId = local_opts.media_output;
-                this.setAudioOutput(local_opts.media_output);
             }
         }
-
         state.pcConfig.iceServers = [];
         if (sync_opts.sip_ice) {
             let servers = sync_opts.sip_ice.split(',');
@@ -407,7 +398,7 @@ function ChromePhone() {
         logger.debug('jssip created');
         // get a list of media devices and listen for changes
         updateDeviceList();
-        navigator.mediaDevices.ondevicechange = function(e) {
+        navigator.mediaDevices.ondevicechange = function() {
             updateDeviceList();
         };
         chrome.idle.setDetectionInterval(15 * 60);
@@ -430,10 +421,10 @@ function ChromePhone() {
             for (let i = 0; i !== devices.length; ++i) {
                 logger.debug('media device %s: %o', i, devices[i]);
                 if (devices[i].kind === 'audioinput') {
-                    audioInputs.push({id: devices[i].deviceId, name: devices[i].label || 'microphone ' + (state.audioSources.length + 1)});
+                    audioInputs.push({id: devices[i].deviceId, name: devices[i].label || devices[i].deviceId === 'default' ? 'Default' : 'microphone ' + (audioInputs.length + 1)});
                     if (state.audioInputId === devices[i].deviceId) audioInput = devices[i].deviceId;
                 } else if (devices[i].kind === 'audiooutput') {
-                    audioOutputs.push({id: devices[i].deviceId, name: devices[i].label || 'speaker ' + (state.audioOutputs.length + 1)});
+                    audioOutputs.push({id: devices[i].deviceId, name: devices[i].label || devices[i].deviceId === 'default' ? 'Default' : 'speaker ' + (audioOutputs.length + 1)});
                     if (state.audioOutputId === devices[i].deviceId) audioOutput = devices[i].deviceId;
                 }
             }
@@ -654,12 +645,14 @@ function ChromePhone() {
     };
 
     this.setAudioInput = function(deviceId) {
-        for (let i=0; i < state.audioInputs.length; i++) {
-            if (deviceId === state.audioInputs[i].id) {
-                state.audioInputId = deviceId;
-                state.audioInput = deviceId;
-                logger.debug('set audio input to %s', state.audioInput);
-                return;
+        if (deviceId) {
+            for (let i = 0; i < state.audioInputs.length; i++) {
+                if (deviceId === state.audioInputs[i].id) {
+                    state.audioInputId = deviceId;
+                    state.audioInput = deviceId;
+                    logger.debug('set audio input to %s', state.audioInput);
+                    return;
+                }
             }
         }
         logger.debug('default audio input');
@@ -671,13 +664,15 @@ function ChromePhone() {
     };
 
     this.setAudioOutput = function(deviceId) {
-        for (let i=0; i < state.audioOutputs.length; i++) {
-            if (deviceId === state.audioOutputs[i].id) {
-                state.audioOutputId = deviceId;
-                state.audioOutput.setSinkId(deviceId);
-                tone.setAudioSinkId(deviceId);
-                logger.debug('set audio output to %s', state.audioOutputId);
-                return;
+        if (deviceId) {
+            for (let i = 0; i < state.audioOutputs.length; i++) {
+                if (deviceId === state.audioOutputs[i].id) {
+                    state.audioOutputId = deviceId;
+                    state.audioOutput.setSinkId(deviceId);
+                    tone.setAudioSinkId(deviceId);
+                    logger.debug('set audio output to %s', state.audioOutputId);
+                    return;
+                }
             }
         }
         logger.debug('default audio output');
@@ -796,7 +791,7 @@ function Tone(context) {
     this.stopRinging = function () {
         if (this.ringing === 1) {
             this.ringerLFOSource.stop(0);
-            this.ringerLFOSource.disconnect();
+            this.ringerLFOSource.disconnect(0);
             this.stop();
             this.ringing = 0;
         }
@@ -806,7 +801,7 @@ function Tone(context) {
         // wait for ringing to stop 1st
         if (this.ringing === 1) {
             this.stopRinging();
-            setTimeout(this.boopBoop(), 5);
+            setTimeout(this.boopBoop, 50);
             return;
         }
         this.start(400, 400);

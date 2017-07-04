@@ -414,6 +414,7 @@ function ChromePhone() {
     };
 
     function updateDeviceList() {
+        logger.debug('updateDeviceList()');
         navigator.mediaDevices.enumerateDevices().then(function(devices) {
             let audioInputs = [];
             let audioOutputs = [];
@@ -421,10 +422,10 @@ function ChromePhone() {
             for (let i = 0; i !== devices.length; ++i) {
                 logger.debug('media device %s: %o', i, devices[i]);
                 if (devices[i].kind === 'audioinput') {
-                    audioInputs.push({id: devices[i].deviceId, name: devices[i].label || devices[i].deviceId === 'default' ? 'Default' : 'microphone ' + (audioInputs.length + 1)});
+                    audioInputs.push({id: devices[i].deviceId, name: devices[i].deviceId === 'default' ? 'Default' : (devices[i].label || 'microphone ' + (audioInputs.length + 1))});
                     if (state.audioInputId === devices[i].deviceId) audioInput = devices[i].deviceId;
                 } else if (devices[i].kind === 'audiooutput') {
-                    audioOutputs.push({id: devices[i].deviceId, name: devices[i].label || devices[i].deviceId === 'default' ? 'Default' : 'speaker ' + (audioOutputs.length + 1)});
+                    audioOutputs.push({id: devices[i].deviceId, name: devices[i].deviceId === 'default' ? 'Default' : (devices[i].label || 'speaker ' + (audioOutputs.length + 1))});
                     if (state.audioOutputId === devices[i].deviceId) audioOutput = devices[i].deviceId;
                 }
             }

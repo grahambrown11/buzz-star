@@ -18,7 +18,7 @@ function ChromePhone() {
         status: 'offline',
         audioContext: new AudioContext(),
         audioOutput: new Audio(),
-        notificationId: '',
+        notificationId: undefined,
         sip_server: '',
         sip_extension: '',
         sip_password: '',
@@ -41,8 +41,7 @@ function ChromePhone() {
         audioOutputs: [],
         audioOutputId: undefined,
     };
-    let audioDestination = state.audioContext.createMediaStreamDestination();
-    let tone = new Tone(state.audioContext, audioDestination);
+    let tone = new Tone(state.audioContext);
     let jssip = undefined;
     let socket = undefined;
 
@@ -89,12 +88,16 @@ function ChromePhone() {
 
         chrome.notifications.onButtonClicked.addListener(function (id, button) {
             console.log('notification ' + id + ' button ' + button + ' clicked');
-            chrome.notifications.clear(state.notificationId);
+            clearNotification();
             if (button === 0) {
                 chromePhone.answer();
             } else {
                 chromePhone.hangup(false);
             }
+        });
+
+        chrome.notifications.onClosed.addListener(function () {
+            state.notificationId = undefined;
         });
     }
 
@@ -109,16 +112,24 @@ function ChromePhone() {
             return;
         }
 
+        if ('chrome' in window && chrome.browserAction) {
+            chrome.browserAction.setIcon({path: 'img/phone-red.png'});
+        }
+
         // register session events
         state.call = data.session;
+        let cli = 'Unknown';
+        logger.debug('remote_identity: %o', state.call.remote_identity);
+        if (state.call.remote_identity && state.call.remote_identity.display_name)
+            cli = state.call.remote_identity.display_name;
+        else if (state.call.remote_identity && state.call.remote_identity.uri && state.call.remote_identity.uri.user)
+            cli = state.call.remote_identity.uri.user;
 
         state.call.on('failed', function(e) {
             logger.debug('failed');
             console.log(e);
             tone.boopBoop();
             onhook();
-            if (state.notificationId)
-                chrome.notifications.clear(state.notificationId);
         });
         state.call.on('ended', function(e) {
             logger.debug('ended');
@@ -131,7 +142,7 @@ function ChromePhone() {
             tone.stopRinging();
             let remoteStream = this.connection.getRemoteStreams()[0];
             setOutputStream(remoteStream);
-            state.infoMessage = 'On Call: ' + data.session.remote_identity.display_name;
+            state.infoMessage = 'On Call: ' + cli;
             offhook();
         });
         state.call.on('hold', function(e) {
@@ -155,22 +166,23 @@ function ChromePhone() {
             updatePopupMute();
         });
 
-        let cli = data.session.remote_identity.display_name;
         state.status = 'ringing';
         state.infoMessage = 'Ringing: ' + cli;
         updatePopupViewStatus();
+        function startIncomingCallNotifiaction() {
+            showNotification("Incoming Call", cli, true);
+            tone.startRinging();
+        }
         // get the sidebar to auto answer if the request was from there...
         if (state.sidebarPort) {
             state.sidebarPort.postMessage({action: 'incoming-call', cli: cli});
             setTimeout(function() {
                 if (!state.call.isEnded() && !state.call.isEstablished()) {
-                    showNotification("Incoming Call", cli, true);
-                    tone.startRinging();
+                    startIncomingCallNotifiaction();
                 }
             }, 100);
         } else {
-            showNotification("Incoming Call", cli, true);
-            tone.startRinging();
+            startIncomingCallNotifiaction();
         }
 
     }
@@ -199,13 +211,20 @@ function ChromePhone() {
             chrome.notifications.create(state.notificationId, {
                 type: 'basic',
                 title: title,
-                message: message,
+                message: message || '',
                 iconUrl: 'img/phone-blank.png',
                 buttons: showAnswerButtons ? [{title: 'Answer'}, {title: 'Reject'}] : [],
                 requireInteraction: showAnswerButtons
             }, function (id) {
                 state.notificationId = id;
             });
+        }
+    }
+
+    function clearNotification() {
+        if (state.notificationId) {
+            chrome.notifications.clear(state.notificationId);
+            state.notificationId = undefined;
         }
     }
 
@@ -225,8 +244,7 @@ function ChromePhone() {
             state.microphone = undefined;
         }
         updatePopupViewStatus();
-        if (state.notificationId)
-            chrome.notifications.clear(state.notificationId);
+        clearNotification();
     }
 
     function offhook() {
@@ -235,8 +253,7 @@ function ChromePhone() {
         }
         state.status = 'offhook';
         updatePopupViewStatus();
-        if (state.notificationId)
-            chrome.notifications.clear(state.notificationId);
+        clearNotification();
     }
 
     function notifyExternalOfError() {
@@ -328,6 +345,7 @@ function ChromePhone() {
         let configuration = {
             sockets: [socket],
             uri: 'sip:' + state.sip_extension + '@' + state.sip_server,
+            display_name: state.sip_extension,
             authorization_user: state.sip_extension,
             password: state.sip_password,
             register: true,
@@ -396,8 +414,7 @@ function ChromePhone() {
         });
         // NOTE: skipping registrationExpiring event so JsSIP handles re-register
         logger.debug('jssip created');
-        // get a list of media devices and listen for changes
-        updateDeviceList();
+        // listen for media device changes
         navigator.mediaDevices.ondevicechange = function() {
             updateDeviceList();
         };
@@ -446,6 +463,7 @@ function ChromePhone() {
         state.errorMessage = undefined;
         state.infoMessage = undefined;
         jssip.start();
+        updateDeviceList();
     };
 
     this.logout = function() {
@@ -459,6 +477,7 @@ function ChromePhone() {
     };
 
     this.call = function(external) {
+        if (this.isOnCall()) return;
         state.fromExternal = external;
         if (!state.phoneNumber) {
             showError("No Phone Number");
@@ -537,7 +556,9 @@ function ChromePhone() {
         state.dialedNumber = state.phoneNumber;
         state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
         offhook();
-        state.call = jssip.call('sip:' + state.dialedNumber + '@' + state.sip_server, {
+        let callUri = 'sip:' + state.dialedNumber + '@' + state.sip_server;
+        logger.debug('caling: %s', callUri);
+        state.call = jssip.call(callUri, {
             eventHandlers: eventHandlers,
             mediaConstraints: {
                 audio: {deviceId: state.audioInput ? {exact: state.audioInput} : undefined},
@@ -693,7 +714,6 @@ function Tone(context) {
     this.destination = this.context.createMediaStreamDestination();
     this.audioOutput = new Audio();
     this.audioOutput.srcObject = this.destination.stream;
-    this.audioOutput.play();
 
     this.status = 0;
     this.ringing = 0;
@@ -719,6 +739,7 @@ function Tone(context) {
 
     this.start = function (freq1, freq2) {
         if (this.status === 1) return;
+        this.audioOutput.play();
         this.osc1 = this.context.createOscillator();
         this.osc2 = this.context.createOscillator();
         this.gainNode = this.context.createGain();
@@ -741,6 +762,7 @@ function Tone(context) {
         this.osc1.stop(0);
         this.osc2.stop(0);
         this.status = 0;
+        this.audioOutput.pause();
     };
 
     this.startDTMF = function (value) {
@@ -799,14 +821,16 @@ function Tone(context) {
     };
 
     this.boopBoop = function () {
+        let tone = this;
         // wait for ringing to stop 1st
         if (this.ringing === 1) {
             this.stopRinging();
-            setTimeout(this.boopBoop, 50);
+            setTimeout(function () {
+                tone.boopBoop();
+            }, 50);
             return;
         }
-        this.start(400, 400);
-        let tone = this;
+        tone.start(400, 400);
         setTimeout(function () {
             tone.stop();
             setTimeout(function () {

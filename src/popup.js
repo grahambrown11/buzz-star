@@ -19,19 +19,23 @@ function uiOnHangup() {
 }
 
 function uiUpdateStatus() {
+    var top = document.querySelector('.chrome-phone');
+    var className = top.className;
     if (chromePhone.getStatus() === 'offhook') {
         uiOnDial(document.getElementById('dial'));
-        document.querySelector('.chrome-phone').className += ' w3-border-red';
+        className = className.replace(/w3-border-(black|green)/, 'w3-border-red');
+        document.querySelector('.chrome-phone').className = className;
         updateMute();
         updateHold();
     } else if (chromePhone.getStatus() === 'onhook') {
-        document.querySelector('.chrome-phone').className += ' w3-border-green';
+        className = className.replace(/w3-border-(black|red)/, 'w3-border-green');
+        document.querySelector('.chrome-phone').className = className;
         uiOnHangup();
     } else if (chromePhone.getStatus() === 'ringing') {
+        className = className.replace(/w3-border-(black|green)/, 'w3-border-red');
+        document.querySelector('.chrome-phone').className = className;
         document.getElementById('dial').innerHTML = 'Answer';
     } else {
-        var top = document.querySelector('.chrome-phone');
-        var className = top.className;
         className = className.replace(/w3-border-(red|green)/, 'w3-border-black');
         document.querySelector('.chrome-phone').className = className;
     }
@@ -129,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    document.getElementById('number').addEventListener('keyup', function() {
+    document.getElementById('number').addEventListener('keyup', function(e) {
         chromePhone.setPhoneNumber(this.value);
     });
 
@@ -143,13 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.getElementById('dial').addEventListener('click', function() {
-        if (chromePhone.getStatus() === 'ringing') {
-            chromePhone.answer();
-        } else {
-            if (!document.getElementById('number').value) return;
-            uiOnDial(this);
-            chromePhone.call(false);
-        }
+        call(this);
     });
 
     document.getElementById('hangup').addEventListener('click', function() {
@@ -190,5 +188,21 @@ document.addEventListener('DOMContentLoaded', function() {
         this.style.display = 'none';
         chromePhone.logout();
     });
+
+    document.addEventListener('keyup', function(e) {
+        if (e.key === 'Enter') {
+            call(document.getElementById('dial'));
+        }
+    });
+
+    function call(btn) {
+        if (chromePhone.getStatus() === 'ringing') {
+            chromePhone.answer();
+        } else {
+            if (!document.getElementById('number').value) return;
+            uiOnDial(btn);
+            chromePhone.call(false);
+        }
+    }
 
 });

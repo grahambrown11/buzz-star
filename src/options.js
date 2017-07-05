@@ -3,7 +3,8 @@ let sync_opts = {
     sip_server: '',
     sip_extension: '',
     sip_password: '',
-    sip_ice: ''
+    sip_ice: '',
+    auto_login: true
 };
 
 let local_opts = {
@@ -16,6 +17,7 @@ function save_options_ui() {
     sync_opts.sip_extension = document.getElementById('sip_extension').value;
     sync_opts.sip_password = document.getElementById('sip_password').value;
     sync_opts.sip_ice = document.getElementById('sip_ice').value;
+    sync_opts.auto_login = document.getElementById('auto_login').checked;
     local_opts.media_input = document.getElementById('media_input').value;
     local_opts.media_output = document.getElementById('media_output').value;
     chrome.storage.local.set(local_opts, function() {
@@ -64,6 +66,7 @@ function restore_options_ui() {
                 document.getElementById('sip_extension').value = sync_items.sip_extension;
                 document.getElementById('sip_password').value = sync_items.sip_password;
                 document.getElementById('sip_ice').value = sync_items.sip_ice;
+                document.getElementById('auto_login').checked = sync_items.auto_login;
             });
 
         });

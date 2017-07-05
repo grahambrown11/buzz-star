@@ -428,6 +428,11 @@ function ChromePhone() {
                 chromePhone.login(false);
             }
         });
+
+        logger.debug('auto_login: %s', sync_opts.auto_login);
+        if (sync_opts.auto_login) {
+            this.login(false);
+        }
     };
 
     function updateDeviceList() {

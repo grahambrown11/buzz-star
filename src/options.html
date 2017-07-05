@@ -14,7 +14,7 @@
             display: inline-block;
             text-align: right;
         }
-        .option input {
+        .option input[type="text"] {
             width: 200px;
         }
         .option select {
@@ -47,6 +47,10 @@
     <div class="option">
         <label for="sip_ice">STUN/TURN:</label>
         <input id="sip_ice" type="text" placeholder="stun:server:3478,turn:server:3478">
+    </div>
+    <div class="option">
+        <label for="auto_login">Auto Login:</label>
+        <input id="auto_login" type="checkbox">
     </div>
     <div class="option">
         <label for="media_input">Media Input:</label>

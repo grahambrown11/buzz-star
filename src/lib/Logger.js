@@ -1,6 +1,8 @@
 'use strict';
 
 import debug from 'debug';
+// enable debug on all modules
+debug.enable('*');
 
 const APP_NAME = 'ChromePhone';
 

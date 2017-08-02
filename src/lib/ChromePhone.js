@@ -2,8 +2,6 @@
 
 import Logger from './Logger.js';
 import JsSIP from 'jssip';
-window.localStorage.setItem('debug', '*');
-JsSIP.debug.enable('JsSIP:*');
 
 function ChromePhone() {
 

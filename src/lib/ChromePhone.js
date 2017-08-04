@@ -420,8 +420,8 @@ function ChromePhone() {
         chrome.idle.onStateChanged.addListener(function(newState) {
             logger.debug('idle state change: %s', newState);
             if ((newState === 'idle' || newState === 'locked') && state.loggedIn) {
-                state.previouslyLoggedIn = state.loggedIn;
                 chromePhone.logout();
+                state.previouslyLoggedIn = true;
             } else if (newState === 'active' && state.previouslyLoggedIn && !state.loggedIn) {
                 chromePhone.login(false);
             }
@@ -471,6 +471,7 @@ function ChromePhone() {
 
     this.logout = function() {
         logger.debug('logout()');
+        state.previouslyLoggedIn = false;
         if (jssip) {
             jssip.stop();
         } else {

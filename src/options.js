@@ -4,6 +4,10 @@ let sync_opts = {
     sip_extension: '',
     sip_password: '',
     sip_ice: '',
+    sip_server_2: '',
+    sip_extension_2: '',
+    sip_password_2: '',
+    sip_ice_2: '',
     auto_login: true
 };
 
@@ -17,6 +21,10 @@ function save_options_ui() {
     sync_opts.sip_extension = document.getElementById('sip_extension').value;
     sync_opts.sip_password = document.getElementById('sip_password').value;
     sync_opts.sip_ice = document.getElementById('sip_ice').value;
+    sync_opts.sip_server_2 = document.getElementById('sip_server_2').value;
+    sync_opts.sip_extension_2 = document.getElementById('sip_extension_2').value;
+    sync_opts.sip_password_2 = document.getElementById('sip_password_2').value;
+    sync_opts.sip_ice_2 = document.getElementById('sip_ice_2').value;
     sync_opts.auto_login = document.getElementById('auto_login').checked;
     local_opts.media_input = document.getElementById('media_input').value;
     local_opts.media_output = document.getElementById('media_output').value;
@@ -66,6 +74,10 @@ function restore_options_ui() {
                 document.getElementById('sip_extension').value = sync_items.sip_extension;
                 document.getElementById('sip_password').value = sync_items.sip_password;
                 document.getElementById('sip_ice').value = sync_items.sip_ice;
+                document.getElementById('sip_server_2').value = sync_items.sip_server_2;
+                document.getElementById('sip_extension_2').value = sync_items.sip_extension_2;
+                document.getElementById('sip_password_2').value = sync_items.sip_password_2;
+                document.getElementById('sip_ice_2').value = sync_items.sip_ice_2;
                 document.getElementById('auto_login').checked = sync_items.auto_login;
             });
 

@@ -126,11 +126,13 @@ function ChromePhone() {
             state.call = undefined;
             onhook();
         });
-        state.call.on('accepted', function(e) {
-            logger.debug('accepted');
-            tone.stopRinging();
+        state.call.on('connecting', function(e) {
+            logger.debug('connecting');
             let remoteStream = this.connection.getRemoteStreams()[0];
             setOutputStream(remoteStream);
+        });
+        state.call.on('accepted', function(e) {
+            logger.debug('accepted');
             state.infoMessage = 'On Call: ' + cli;
             state.incoming_answer = false;
             offhook();
@@ -601,7 +603,7 @@ function ChromePhone() {
             state.call.answer({
                 pcConfig: state.incoming_pcConfig
             });
-            state.audioOutput.play();
+            tone.stopRinging();
             offhook();
         }
         state.incoming_answer = false;

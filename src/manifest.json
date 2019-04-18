@@ -7,7 +7,8 @@
     "storage",
     "background",
     "notifications",
-    "idle"
+    "idle",
+    "tabs"
   ],
   "background": {
     "scripts": ["options.js", "chrome-phone.js"]
@@ -26,6 +27,9 @@
   },
   "incognito": "not_allowed",
   "externally_connectable": {
-    "matches": ["*://*.differentlife.co.za/*"]
+    "matches": [
+      "*://*.differentlife.co.za/*",
+      "*://*.stangenlife.co.za/*"
+    ]
   }
 }

@@ -34,6 +34,7 @@ function save_options_ui() {
             let status = document.getElementById('status');
             status.textContent = 'Options saved.';
             let bg = chrome.extension.getBackgroundPage();
+            bg.chromePhone.shutdown();
             bg.chromePhone.init(sync_opts, local_opts);
             setTimeout(function() {
                 status.textContent = '';

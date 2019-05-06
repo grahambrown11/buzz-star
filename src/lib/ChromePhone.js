@@ -30,64 +30,17 @@ function ChromePhone() {
         audioOutputs: [],
         audioOutputId: undefined,
         incoming_pcConfig: undefined,
-        incoming_answer: false
+        incoming_answer: false,
+        micAccess: false
     };
     let tone = new Tone(state.audioContext);
 
     function checkMicError(err) {
-        if ('chrome' in window && chrome.extension && err.name === 'MediaDeviceFailedDueToShutdown') {
+        logger.warn('Error: %s - %s', err.name, err.message);
+        if ('chrome' in window && chrome.extension && (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0)) {
+            state.micAccess = false;
             chrome.tabs.create({url: chrome.extension.getURL('microphone.html')});
         }
-    }
-
-    if ('chrome' in window && chrome.extension) {
-        chrome.browserAction.setIcon({path: 'img/phone-blank.png'});
-
-        // check we have access to the microphone
-        navigator.getUserMedia({audio: true}, function(stream) {
-            logger.debug('got access to mic');
-            stream.getAudioTracks()[0].stop();
-        }, function(err) {
-            checkMicError(err);
-        });
-
-        chrome.runtime.onConnectExternal.addListener(function (port) {
-            console.log('onConnectExternal');
-            state.sidebarPort = port; // for now the last sidebar connect wins...
-            port.onMessage.addListener(function (msg) {
-                console.log('onMessage (External)');
-                console.log(msg);
-                if (msg === 'ping') {
-                    port.postMessage('pong');
-                } else if (typeof msg.action !== 'undefined') {
-                    if (msg.action === 'call') {
-                        state.phoneNumber = msg.phoneNumber;
-                        chromePhone.call(true);
-                    } else if (msg.action === 'answer' && state.call) {
-                        chromePhone.answer();
-                    } else if (msg.action === 'login') {
-                        chromePhone.login(true);
-                    }
-                }
-            });
-            port.onDisconnect.addListener(function () {
-                console.log('External connection disconnected');
-            });
-        });
-
-        chrome.notifications.onButtonClicked.addListener(function (id, button) {
-            console.log('notification ' + id + ' button ' + button + ' clicked');
-            clearNotification();
-            if (button === 0) {
-                chromePhone.answer();
-            } else {
-                chromePhone.hangup(false);
-            }
-        });
-
-        chrome.notifications.onClosed.addListener(function () {
-            state.notificationId = undefined;
-        });
     }
 
     function incomingCall(data, pcConfig) {
@@ -401,8 +354,68 @@ function ChromePhone() {
         return true;
     }
 
+    this.shutdown = function() {
+        logger.debug('shutdown');
+        this.logout();
+        state.servers = [];
+    };
+
     this.init = function (sync_opts, local_opts) {
         logger.debug('init(sync_opts:%o, local_opts:%o)', sync_opts, local_opts);
+
+        if ('chrome' in window && chrome.extension) {
+            logger.debug('Is a chrome extension');
+            chrome.browserAction.setIcon({path: 'img/phone-blank.png'});
+
+            // check we have access to the microphone
+            logger.debug('Checking Access to mic...');
+            navigator.getUserMedia({audio: true}, function(stream) {
+                logger.debug('... have access to mic');
+                state.micAccess = true;
+                stream.getAudioTracks()[0].stop();
+            }, function(err) {
+                checkMicError(err);
+            });
+
+            chrome.runtime.onConnectExternal.addListener(function (port) {
+                console.log('onConnectExternal');
+                state.sidebarPort = port; // for now the last sidebar connect wins...
+                port.onMessage.addListener(function (msg) {
+                    console.log('onMessage (External)');
+                    console.log(msg);
+                    if (msg === 'ping') {
+                        port.postMessage('pong');
+                    } else if (typeof msg.action !== 'undefined') {
+                        if (msg.action === 'call') {
+                            state.phoneNumber = msg.phoneNumber;
+                            chromePhone.call(true);
+                        } else if (msg.action === 'answer' && state.call) {
+                            chromePhone.answer();
+                        } else if (msg.action === 'login') {
+                            chromePhone.login(true);
+                        }
+                    }
+                });
+                port.onDisconnect.addListener(function () {
+                    console.log('External connection disconnected');
+                });
+            });
+
+            chrome.notifications.onButtonClicked.addListener(function (id, button) {
+                console.log('notification ' + id + ' button ' + button + ' clicked');
+                clearNotification();
+                if (button === 0) {
+                    chromePhone.answer();
+                } else {
+                    chromePhone.hangup(false);
+                }
+            });
+
+            chrome.notifications.onClosed.addListener(function () {
+                state.notificationId = undefined;
+            });
+        }
+
         state.errorMessage = undefined;
         logger.debug('Init Server 1');
         if (!createSipServer(sync_opts.sip_server, sync_opts.sip_extension, sync_opts.sip_password, sync_opts.sip_ice)) {
@@ -428,6 +441,7 @@ function ChromePhone() {
         navigator.mediaDevices.ondevicechange = function() {
             updateDeviceList();
         };
+        updateDeviceList();
         chrome.idle.setDetectionInterval(15 * 60);
         chrome.idle.onStateChanged.addListener(function(newState) {
             logger.debug('idle state change: %s', newState);
@@ -742,6 +756,10 @@ function ChromePhone() {
         state.audioOutput.setSinkId('default');
         tone.setAudioSinkId('default');
     };
+
+    this.hasMicAccess = function() {
+        return state.micAccess;
+    }
 
 }
 

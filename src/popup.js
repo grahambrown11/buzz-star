@@ -101,6 +101,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if ('chrome' in window && chrome.extension) {
         var bg = chrome.extension.getBackgroundPage();
         window.chromePhone = bg.chromePhone;
+        if (!window.chromePhone.hasMicAccess()) {
+            var mic = document.getElementById('mic-access');
+            mic.style.display = '';
+            mic.href = chrome.extension.getURL('microphone.html');
+        }
         uiUpdateStatus();
     } else {
         // not an extension add scripts

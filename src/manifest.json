@@ -1,7 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Different Chrome Phone",
-  "description": "Different Chrome Phone",
+  "name": "Buzz* for Google Chrome™",
+  "short_name": "Buzz*",
+  "description": "A WebRTC Phone for Asterisk and for Google Chrome™",
   "version": "$$version$$",
   "permissions": [
     "storage",
@@ -14,11 +15,13 @@
     "scripts": ["options.js", "chrome-phone.js"]
   },
   "icons": {
-    "64": "img/phone-blank.png"
+    "16": "img/phone-blank-16.png",
+    "48": "img/phone-blank-48.png",
+    "128": "img/phone-blank-128.png"
   },
   "browser_action": {
-    "default_icon": "img/phone-blank.png",
-    "default_title": "Different Chrome Phone",
+    "default_icon": "img/phone-blank-128.png",
+    "default_title": "Buzz*",
     "default_popup": "popup.html"
   },
   "options_ui": {
@@ -29,7 +32,8 @@
   "externally_connectable": {
     "matches": [
       "*://*.differentlife.co.za/*",
-      "*://*.stangenlife.co.za/*"
+      "*://*.stangenlife.co.za/*",
+      "*://*.lifetech.internal/*"
     ]
   }
 }

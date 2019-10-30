@@ -38,7 +38,7 @@ function save_options_ui() {
             bg.chromePhone.init(sync_opts, local_opts);
             setTimeout(function() {
                 status.textContent = '';
-            }, 1500);
+            }, 3000);
         });
     });
 }
@@ -46,6 +46,10 @@ function save_options_ui() {
 function restore_options_ui() {
     // is the options page
     if (document.getElementById('options')) {
+
+        if (chrome.extension.getBackgroundPage().chromePhone.connectedToSidebar()) {
+            document.getElementById('crm-settings').style.display = '';
+        }
 
         chrome.storage.local.get(local_opts, function(local_items) {
 
@@ -85,6 +89,9 @@ function restore_options_ui() {
         });
 
         document.getElementById('save').addEventListener('click', save_options_ui);
+        document.getElementById('load').addEventListener('click', function () {
+            chrome.extension.getBackgroundPage().chromePhone.loadSettingsFromCRM(document);
+        });
     }
 }
 

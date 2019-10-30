@@ -44,7 +44,10 @@ function uiUpdateStatus() {
         document.getElementById('logout').style.display = '';
         document.getElementById('dial-pad').style.display = '';
     } else {
-        document.getElementById('login').style.display = '';
+        document.getElementById('login').style.display = 'none';
+        if (chromePhone.canLoggedIn()) {
+            document.getElementById('login').style.display = '';
+        }
         document.getElementById('logout').style.display = 'none';
         document.getElementById('dial-pad').style.display = 'none';
     }

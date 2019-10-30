@@ -31,7 +31,8 @@ function ChromePhone() {
         audioOutputId: undefined,
         incoming_pcConfig: undefined,
         incoming_answer: false,
-        micAccess: false
+        micAccess: false,
+        optionsDoc: undefined
     };
     let tone = new Tone(state.audioContext);
 
@@ -114,7 +115,7 @@ function ChromePhone() {
         state.infoMessage = 'Ringing: ' + cli;
         state.incoming_answer = true;
         updateOverallStatus();
-        function startIncomingCallNotifiaction() {
+        function startIncomingCallNotification() {
             showNotification("Incoming Call", cli, true);
             tone.startRinging();
         }
@@ -123,11 +124,11 @@ function ChromePhone() {
             state.sidebarPort.postMessage({action: 'incoming-call', cli: cli});
             setTimeout(function() {
                 if (!state.call.isEnded() && !state.call.isEstablished()) {
-                    startIncomingCallNotifiaction();
+                    startIncomingCallNotification();
                 }
             }, 100);
         } else {
-            startIncomingCallNotifiaction();
+            startIncomingCallNotification();
         }
     }
 
@@ -362,6 +363,7 @@ function ChromePhone() {
 
     this.init = function (sync_opts, local_opts) {
         logger.debug('init(sync_opts:%o, local_opts:%o)', sync_opts, local_opts);
+        state.errorMessage = undefined;
 
         if ('chrome' in window && chrome.extension) {
             logger.debug('Is a chrome extension');
@@ -387,12 +389,13 @@ function ChromePhone() {
                         port.postMessage('pong');
                     } else if (typeof msg.action !== 'undefined') {
                         if (msg.action === 'call') {
-                            state.phoneNumber = msg.phoneNumber;
-                            chromePhone.call(true);
+                            chromePhone.callNumber(msg.phoneNumber, true);
                         } else if (msg.action === 'answer' && state.call) {
                             chromePhone.answer();
                         } else if (msg.action === 'login') {
                             chromePhone.login(true);
+                        } else if (msg.action === 'set-settings') {
+                            chromePhone.updateOptions(msg.settings);
                         }
                     }
                 });
@@ -416,19 +419,6 @@ function ChromePhone() {
             });
         }
 
-        state.errorMessage = undefined;
-        logger.debug('Init Server 1');
-        if (!createSipServer(sync_opts.sip_server, sync_opts.sip_extension, sync_opts.sip_password, sync_opts.sip_ice)) {
-            state.errorMessage = 'Missing settings';
-            logger.error('Missing settings');
-            return;
-        }
-        if (sync_opts.sip_server_2) {
-            logger.debug('Init Server 2');
-            if (!createSipServer(sync_opts.sip_server_2, sync_opts.sip_extension_2, sync_opts.sip_password_2, sync_opts.sip_ice_2)) {
-                logger.debug('Server 2 Missing settings, skipping');
-            }
-        }
         if (local_opts) {
             if (local_opts.media_input) {
                 state.audioInputId = local_opts.media_input;
@@ -442,21 +432,39 @@ function ChromePhone() {
             updateDeviceList();
         };
         updateDeviceList();
-        chrome.idle.setDetectionInterval(15 * 60);
-        chrome.idle.onStateChanged.addListener(function(newState) {
-            logger.debug('idle state change: %s', newState);
-            if ((newState === 'idle' || newState === 'locked') && chromePhone.isLoggedIn()) {
-                chromePhone.logout();
-                state.previouslyLoggedIn = true;
-            } else if (newState === 'active' && state.previouslyLoggedIn && !chromePhone.isLoggedIn()) {
-                chromePhone.login(false);
+
+        logger.debug('Init Server 1');
+        if (!createSipServer(sync_opts.sip_server, sync_opts.sip_extension, sync_opts.sip_password, sync_opts.sip_ice)) {
+            state.errorMessage = 'Missing settings';
+            logger.error('Missing settings');
+            return;
+        }
+        if (sync_opts.sip_server_2) {
+            logger.debug('Init Server 2');
+            if (!createSipServer(sync_opts.sip_server_2, sync_opts.sip_extension_2, sync_opts.sip_password_2, sync_opts.sip_ice_2)) {
+                logger.debug('Server 2 Missing settings, skipping');
             }
-        });
+        }
 
         logger.debug('auto_login: %s', sync_opts.auto_login);
         if (sync_opts.auto_login) {
             this.login(false);
         }
+
+        if ('chrome' in window && chrome.idle) {
+            logger.debug('chrome idle api exits');
+            chrome.idle.setDetectionInterval(15 * 60);
+            chrome.idle.onStateChanged.addListener(function (newState) {
+                logger.debug('idle state change: %s', newState);
+                if ((newState === 'idle' || newState === 'locked') && chromePhone.isLoggedIn()) {
+                    chromePhone.logout();
+                    state.previouslyLoggedIn = true;
+                } else if (newState === 'active' && state.previouslyLoggedIn && !chromePhone.isLoggedIn()) {
+                    chromePhone.login(false);
+                }
+            });
+        }
+
     };
 
     function updateDeviceList() {
@@ -497,7 +505,7 @@ function ChromePhone() {
         }
     };
 
-    this.logout = function() {
+     this.logout = function() {
         logger.debug('logout()');
         state.previouslyLoggedIn = false;
         for (let srv=0; srv < state.servers.length; srv++) {
@@ -510,11 +518,21 @@ function ChromePhone() {
         }
     };
 
-    this.call = function(external) {
+    this.call = function() {
+        this.callNumber(state.phoneNumber, false);
+    };
+
+    this.callNumber = function(phoneNumber, external) {
         if (this.isOnCall()) return;
         state.fromExternal = external;
-        if (!state.phoneNumber) {
+        if (!phoneNumber) {
+            logger.warn("No Phone Number");
             showError("No Phone Number");
+            return;
+        }
+        if (state.servers.length === 0) {
+            logger.warn("No servers setup");
+            notifyExternal({error: 'No servers setup'});
             return;
         }
         let srv = state.servers[0];
@@ -593,7 +611,7 @@ function ChromePhone() {
 
         };
         state.errorMessage = undefined;
-        state.dialedNumber = state.phoneNumber;
+        state.dialedNumber = phoneNumber;
         state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
         let callUri = 'sip:' + state.dialedNumber + '@' + srv.sip_server;
         logger.debug('caling: %s', callUri);
@@ -669,11 +687,13 @@ function ChromePhone() {
             return 'offhook';
         }
         let status = 'offline';
-        if (state.servers[0].connection.status !== 'offline') {
-            status = state.servers[0].connection.status;
-        }
-        if (status !== 'offhook' && state.servers.length > 1 && state.servers[1].connection.status !== 'offline') {
-            status = state.servers[0].connection.status;
+        if (state.servers.length > 0) {
+            if (state.servers[0].connection.status !== 'offline') {
+                status = state.servers[0].connection.status;
+            }
+            if (status !== 'offhook' && state.servers.length > 1 && state.servers[1].connection.status !== 'offline') {
+                status = state.servers[0].connection.status;
+            }
         }
         return status;
     };
@@ -687,8 +707,13 @@ function ChromePhone() {
     };
 
     this.isLoggedIn = function() {
+        if (state.servers.length === 0) return false;
         if (state.servers[0].connection.loggedIn) return true;
         return state.servers.length > 1 && state.servers[1].connection.loggedIn;
+    };
+
+    this.canLoggedIn = function() {
+        return state.servers.length > 0;
     };
 
     this.getErrorMessage = function() {
@@ -760,6 +785,42 @@ function ChromePhone() {
     this.hasMicAccess = function() {
         return state.micAccess;
     }
+
+    this.connectedToSidebar = function() {
+        logger.debug('sidebarPort type: ' + (typeof state.sidebarPort));
+        return typeof state.sidebarPort !== "undefined";
+    };
+
+    this.loadSettingsFromCRM = function(optionsDoc) {
+        if (state.sidebarPort) {
+            logger.debug('Request settings from CRM');
+            state.optionsDoc = optionsDoc;
+            state.sidebarPort.postMessage({action: 'get-settings'});
+        } else {
+            logger.warn('No Sidebar Port, cannot request settings');
+        }
+    };
+
+    this.updateOptions = function(settings) {
+        if (state.optionsDoc) {
+            logger.debug('Request settings from CRM');
+            state.optionsDoc.getElementById('sip_server').value = settings.server1;
+            state.optionsDoc.getElementById('sip_extension').value = settings.extension;
+            state.optionsDoc.getElementById('sip_password').value = settings.password;
+            if (settings.server2) {
+                state.optionsDoc.getElementById('sip_server_2').value = settings.server2;
+                state.optionsDoc.getElementById('sip_extension_2').value = settings.extension;
+                state.optionsDoc.getElementById('sip_password_2').value = settings.password;
+            } else {
+                state.optionsDoc.getElementById('sip_server_2').value = '';
+                state.optionsDoc.getElementById('sip_extension_2').value = '';
+                state.optionsDoc.getElementById('sip_password_2').value = '';
+            }
+            state.optionsDoc = undefined;
+        } else {
+            logger.warn('options doc was not set');
+        }
+    };
 
 }
 

@@ -1,3 +1,3 @@
 #!/bin/bash
 npm install
-gulp prod
+./node_modules/gulp/bin/gulp.js prod

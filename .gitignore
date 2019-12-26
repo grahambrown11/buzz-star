@@ -1,6 +1,5 @@
 .DS_Store
 .idea/
-chrome-phone/
+buzz-star/
 node_modules/
-chrome-phone.zip
-chrome-phone.crx
+buzz-star.zip

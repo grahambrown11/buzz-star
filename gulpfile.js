@@ -10,7 +10,7 @@ const zip = require('gulp-zip');
 const replace = require('gulp-replace');
 const pkg = require('./package.json');
 
-const OUTPUT_DIR = 'chrome-phone';
+const OUTPUT_DIR = 'buzz-star';
 let debug = true;
 
 gulp.task('clean', () => del(OUTPUT_DIR, {force: true}));
@@ -62,7 +62,7 @@ gulp.task('debug-off', (cb) => {
 
 gulp.task('zip', gulp.series('bundle', () => {
     return gulp.src(OUTPUT_DIR + '/**', {dot: true})
-    .pipe(zip('chrome-phone.zip'))
+    .pipe(zip('buzz-star.zip'))
     .pipe(gulp.dest("."));
 }));
 

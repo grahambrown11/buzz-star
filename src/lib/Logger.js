@@ -1,8 +1,6 @@
 'use strict';
 
 import debug from 'debug';
-// enable debug on all modules
-debug.enable('*');
 
 const APP_NAME = 'ChromePhone';
 
@@ -18,6 +16,8 @@ export default class Logger {
         this._debug.enabled = true;
         this._warn.enabled = true;
         this._error.enabled = true;
+        // enable debug on all modules
+        debug.enable('*');
     }
 
     get debug() {

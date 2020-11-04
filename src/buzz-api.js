@@ -24,17 +24,17 @@ function BuzzApi() {
     };
 
     /**
-     * Ping Buzz*, should get a pong via the callback
-     */
-    this.ping = function() {
-        window.postMessage({type: 'FROM_PAGE', data: 'ping'});
-    }
-
-    /**
      * Post an action to Buzz*
      */
     this.sendAction = function(action) {
         window.postMessage({type: 'FROM_PAGE', data: action});
+    }
+
+    /**
+     * Ping Buzz*, should get a pong via the callback
+     */
+    this.ping = function() {
+        this.sendAction({action: 'ping'});
     }
 
     /**

@@ -17,7 +17,7 @@ export default class Logger {
         this._warn.enabled = true;
         this._error.enabled = true;
         // enable debug on all modules
-        debug.enable('*');
+        debug.enable('ChromePhone,JsSIP');
     }
 
     get debug() {

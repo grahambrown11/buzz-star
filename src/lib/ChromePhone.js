@@ -505,6 +505,12 @@ function ChromePhone() {
 
     };
 
+    this.delayedInit = function (sync_opts, local_opts) {
+        setTimeout(function() {
+            chromePhone.init(sync_opts, local_opts);
+        }, 200);
+    }
+
     function updateDeviceList() {
         if (state.micAccess) {
             logger.debug('updateDeviceList()');

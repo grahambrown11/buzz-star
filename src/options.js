@@ -48,9 +48,7 @@ function save_options_ui() {
             // Update status to let user know options were saved.
             let status = document.getElementById('status');
             status.textContent = 'Options saved.';
-            setTimeout(function() {
-                chrome.extension.getBackgroundPage().chromePhone.init(sync_opts, local_opts, false);
-            }, 200);
+            chrome.extension.getBackgroundPage().chromePhone.delayedInit(sync_opts, local_opts);
             setTimeout(function() {
                 status.textContent = '';
             }, 5000);

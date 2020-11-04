@@ -19,6 +19,7 @@ function ChromePhone() {
         call: undefined,
         mute: false,
         hold: false,
+        hijackLinks: false,
         externalAPIURL: undefined,
         externalAPIPort: undefined,
         errorMessage: undefined,
@@ -397,6 +398,7 @@ function ChromePhone() {
             logger.debug('Is a chrome extension');
             chrome.browserAction.setIcon({path: 'img/phone-blank.png'});
 
+            state.hijackLinks = sync_opts.hijack_links;
             state.externalAPIURL = undefined;
             if (sync_opts.external_api) {
                 state.externalAPIURL = sync_opts.external_api;
@@ -421,11 +423,16 @@ function ChromePhone() {
                 if (request.action) {
                     if (request.action === 'check-mic') {
                         checkMic();
-                    } else if (request.action === 'auto' && sender.tab) {
+                    } else if (request.action === 'tel-links') {
+                        logger.debug('hijack links check = ' + state.hijackLinks);
+                        sendResponse({allowed: state.hijackLinks});
+                    } else if (request.action === 'auto' && sender.url) {
+                        logger.debug('auto check from ' + sender.url);
                         var allowed = false;
-                        if (state.externalAPIURL && sender.tab.url === state.externalAPIURL) {
+                        if (state.externalAPIURL && sender.url === state.externalAPIURL) {
                             allowed = true;
                         }
+                        logger.debug('auto check = ' + allowed);
                         sendResponse({allowed: allowed});
                     } else if (request.action === 'call') {
                         chromePhone.setPhoneNumber(request.phoneNumber);
@@ -438,10 +445,13 @@ function ChromePhone() {
                 state.externalAPIPort = port; // for now the last sidebar connect wins...
                 port.onMessage.addListener(function (msg) {
                     logger.debug('onMessage (Content Script): %o', msg);
-                    if (msg === 'ping' || msg.action === 'ping') {
-                        port.postMessage('pong');
+                    if (msg === 'ping') {
+                        state.externalAPIPort.postMessage('pong');
                     } else if (typeof msg.action !== 'undefined') {
-                        if (msg.action === 'call') {
+                        if (msg.action === 'ping') {
+                            logger.debug('sending pong');
+                            state.externalAPIPort.postMessage({action: 'pong'});
+                        } else if (msg.action === 'call') {
                             chromePhone.callNumber(msg.phoneNumber, true);
                         } else if (msg.action === 'answer' && state.call) {
                             chromePhone.answer();

@@ -17,7 +17,8 @@ let sync_opts = {
         ice: '',
     },
     auto_login: true,
-    external_api: ''
+    external_api: '',
+    hijack_links: false
 };
 
 let local_opts = {
@@ -40,6 +41,7 @@ function save_options_ui() {
     sync_opts.sip_2.ice = document.getElementById('sip_2_ice').value;
     sync_opts.external_api = document.getElementById('external_api').value;
     sync_opts.auto_login = document.getElementById('auto_login').checked;
+    sync_opts.hijack_links = document.getElementById('hijack_links').checked;
     local_opts.media_input = document.getElementById('media_input').value;
     local_opts.media_output = document.getElementById('media_output').value;
     chrome.extension.getBackgroundPage().chromePhone.shutdown();
@@ -105,6 +107,7 @@ function restore_options_ui() {
                 document.getElementById('sip_2_ice').value = sync_items.sip_2.ice;
                 document.getElementById('external_api').value = sync_items.external_api;
                 document.getElementById('auto_login').checked = sync_items.auto_login;
+                document.getElementById('hijack_links').checked = sync_items.hijack_links;
             });
 
         });

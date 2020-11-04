@@ -24,12 +24,24 @@ function BuzzApi() {
     };
 
     /**
+     * Ping Buzz*, should get a pong via the callback
+     */
+    this.ping = function() {
+        window.postMessage({type: 'FROM_PAGE', data: 'ping'});
+    }
+
+    /**
+     * Post an action to Buzz*
+     */
+    this.sendAction = function(action) {
+        window.postMessage({type: 'FROM_PAGE', data: action});
+    }
+
+    /**
      * Send the Answer action
      */
     this.login = function() {
-        window.postMessage({type: 'FROM_PAGE', data: {
-            action: 'login',
-        }});
+        this.sendAction({action: 'login'});
     }
 
     /**
@@ -37,19 +49,17 @@ function BuzzApi() {
      * @param phoneNumber the number to dial
      */
     this.dial = function(phoneNumber) {
-        window.postMessage({type: 'FROM_PAGE', data: {
+        this.sendAction({
             action: 'call',
             phoneNumber: phoneNumber
-        }});
+        });
     };
 
     /**
      * Send the Answer action
      */
     this.answer = function() {
-        window.postMessage({type: 'FROM_PAGE', data: {
-            action: 'answer',
-        }});
+        this.sendAction({action: 'answer'});
     }
 
     /**
@@ -57,10 +67,10 @@ function BuzzApi() {
      * @param settings the settings to send
      */
     this.sendSettings = function(settings) {
-        window.postMessage({type: 'FROM_PAGE', data: {
+        this.sendAction({
             action: ' set-settings',
             settings: settings
-        }});
+        });
     }
 
     init();

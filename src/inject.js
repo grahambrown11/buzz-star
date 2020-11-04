@@ -11,6 +11,13 @@ console.log("Buzz Content Script Loaded");
         console.log('reponse from extension: ', response);
         if (response.allowed) {
             auto = true;
+            if (!window.buzzApi) {
+                var s = document.createElement("script");
+                s.type = "text/javascript";
+                s.src = chrome.runtime.getURL("buzz-api.js");
+                console.log("Inject Buzz API Script - " + s.src);
+                (document.head || document.documentElement).appendChild(s);
+            }
         }
     });
 
@@ -40,11 +47,4 @@ console.log("Buzz Content Script Loaded");
         }
     }, false);
 
-    if (!window.buzzApi) {
-        var s = document.createElement("script");
-        s.type = "text/javascript";
-        s.src = chrome.runtime.getURL("buzz-api.js");
-        console.log("Inject Buzz API Script - " + s.src);
-        (document.head || document.documentElement).appendChild(s);
-    }
 })();

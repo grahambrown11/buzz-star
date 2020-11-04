@@ -43,6 +43,8 @@ function uiUpdateStatus() {
         document.getElementById('login').style.display = 'none';
         document.getElementById('logout').style.display = '';
         document.getElementById('dial-pad').style.display = '';
+        document.getElementById('number').value = chromePhone.getPhoneNumber();
+        document.getElementById('number').focus();
     } else {
         document.getElementById('login').style.display = 'none';
         if (chromePhone.canLoggedIn()) {
@@ -52,7 +54,6 @@ function uiUpdateStatus() {
         document.getElementById('dial-pad').style.display = 'none';
     }
     updateMessages();
-    document.getElementById('number').value = chromePhone.getPhoneNumber();
 }
 
 function updateMute() {
@@ -116,9 +117,6 @@ document.addEventListener('DOMContentLoaded', function() {
         var s1 = document.createElement('script');
         s1.src = 'chrome-phone.js';
         s2.parentNode.insertBefore(s1, s2);
-        s1 = document.createElement('script');
-        s1.src = 'microphone.js';
-        s2.parentNode.insertBefore(s1, s2);
         setTimeout(function() {
             uiUpdateStatus();
         }, 250);
@@ -142,10 +140,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.getElementById('number').addEventListener('keyup', function(e) {
+        this.value = this.value.replace(/\D/g,'');
         chromePhone.setPhoneNumber(this.value);
     });
 
     document.getElementById('number').addEventListener('paste', function() {
+        this.value = this.value.replace(/\D/g,'');
         chromePhone.setPhoneNumber(this.value);
     });
 

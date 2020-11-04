@@ -3,25 +3,48 @@
 <head>
     <title>Options | Buzz*</title>
     <style>
+        body {
+            margin: 0;
+        }
         #options {
-            padding: 10px;
+            width: 570px;
+            padding: 5px;
+        }
+        .server {
+            margin-bottom: 10px;
+            border-bottom: 1px solid #8c8c8c
+        }
+        .server h3 {
+            margin: 4px;
+            width: 210px;
+            float: left;
+        }
+        .server h3.s1 {
+            margin-left: 110px;
         }
         .option {
             margin-bottom: 5px;
+        }
+        .option .s2 {
+            margin-left: 5px;
         }
         .option label {
             width: 105px;
             display: inline-block;
             text-align: right;
         }
-        .option input[type="text"] {
-            width: 200px;
+        .option input[type="text"],.option input[type="password"], .option select {
+            width: 215px;
         }
-        .option select {
-            width: 200px;
+        #external_api {
+            width: 440px;
+        }
+        #save {
+            margin: 5px 0 0 108px;
         }
         #status {
-            margin-left: 5px;
+            margin-left: 108px;
+            height: 12px;
         }
         a {
             text-decoration: none;
@@ -33,56 +56,67 @@
 <div id="options">
     <div id="crm-settings" class="option" style="display: none">
         <label>Settings:</label>
-        <button id="load">Load from CRM</button>
+
     </div>
-    <div class="option">
-        <label for="sip_server">SIP Server 1:</label>
-        <input id="sip_server" type="text" placeholder="pbx server">
-    </div>
-    <div class="option">
-        <label for="sip_extension">SIP Extension 1:</label>
-        <input id="sip_extension" type="text" placeholder="extn">
-    </div>
-    <div class="option">
-        <label for="sip_password">SIP Password 1:</label>
-        <input id="sip_password" type="password" placeholder="* * *">
-    </div>
-    <div class="option">
-        <label for="sip_ice">STUN/TURN 1:</label>
-        <input id="sip_ice" type="text" placeholder="stun:server:3478,turn:server:3478">
-    </div>
-    <div class="option">
-        <label for="sip_server_2">SIP Server 2:</label>
-        <input id="sip_server_2" type="text" placeholder="pbx server">
-    </div>
-    <div class="option">
-        <label for="sip_extension_2">SIP Extension 2:</label>
-        <input id="sip_extension_2" type="text" placeholder="extn">
-    </div>
-    <div class="option">
-        <label for="sip_password_2">SIP Password 2:</label>
-        <input id="sip_password_2" type="password" placeholder="* * *">
-    </div>
-    <div class="option">
-        <label for="sip_ice_2">STUN/TURN 2:</label>
-        <input id="sip_ice_2" type="text" placeholder="stun:server:3478,turn:server:3478">
+    <div class="server">
+        <h3 class="s1">Server 1:</h3>
+        <h3 class="s2">Server 2:</h3>
+        <div class="option">
+            <label for="sip_1_host">Host:</label>
+            <input id="sip_1_host" class="s1" type="text" tabindex="1" placeholder="pbx.local">
+            <input id="sip_2_host" class="s2" type="text" tabindex="2" placeholder="pbx.local">
+        </div>
+        <div class="option">
+            <label for="sip_1_port">Port:</label>
+            <input id="sip_1_port" class="s1" type="text" tabindex="1" placeholder="8089">
+            <input id="sip_2_port" class="s2" type="text" tabindex="2" placeholder="8089">
+        </div>
+        <div class="option">
+            <label for="sip_1_path">Path:</label>
+            <input id="sip_1_path" class="s1" type="text" tabindex="1" placeholder="/ws">
+            <input id="sip_2_path" class="s2" type="text" tabindex="2" placeholder="/ws">
+        </div>
+        <div class="option">
+            <label for="sip_1_extension">Extension:</label>
+            <input id="sip_1_extension" class="s1" type="text" tabindex="1" placeholder="extn">
+            <input id="sip_2_extension" class="s2" type="text" tabindex="2" placeholder="extn">
+        </div>
+        <div class="option">
+            <label for="sip_1_password">Password:</label>
+            <input id="sip_1_password" class="s1" type="password" tabindex="1" placeholder="* * *">
+            <input id="sip_2_password" class="s2" type="password" tabindex="2" placeholder="* * *">
+        </div>
+        <div class="option">
+            <label for="sip_1_ice">STUN/TURN:</label>
+            <input id="sip_1_ice" class="s1" type="text" tabindex="1" placeholder="stun:server:3478,turn:server:3478">
+            <input id="sip_2_ice" class="s2" type="text" tabindex="2" placeholder="stun:server:3478,turn:server:3478">
+        </div>
     </div>
     <div class="option">
         <label for="auto_login">Auto Login:</label>
-        <input id="auto_login" type="checkbox">
+        <input id="auto_login" type="checkbox" tabindex="3">
     </div>
     <div class="option">
+        <label for="hijack_links">Handle Tel Links:</label>
+        <input id="hijack_links" type="checkbox" tabindex="3">
+    </div>
+    <div class="option">
+        <label for="external_api">Allow API Form:</label>
+        <input id="external_api" type="text" tabindex="3" placeholder="https://crm.local">
+    </div>
+    <div class="option media" style="display: none">
         <label for="media_input">Media Input:</label>
-        <select id="media_input"></select>
+        <select id="media_input" tabindex="3"></select>
     </div>
-    <div class="option">
+    <div class="option media" style="display: none">
         <label for="media_output">Media Output:</label>
-        <select id="media_output"></select>
+        <select id="media_output" tabindex="3"></select>
     </div>
     <div class="option">
-        <button id="save">Save</button>
-        <span id="status"></span>
+        <button id="save" tabindex="4">Save</button>
+        <button id="load" tabindex="4" style="display: none">Load from API</button>
     </div>
+    <div id="status"></div>
 </div>
 </body>
 </html>

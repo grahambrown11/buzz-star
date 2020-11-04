@@ -7,9 +7,7 @@
   "permissions": [
     "storage",
     "background",
-    "notifications",
-    "idle",
-    "tabs"
+    "notifications"
   ],
   "background": {
     "scripts": ["options.js", "chrome-phone.js"]
@@ -29,11 +27,10 @@
     "chrome_style": true
   },
   "incognito": "not_allowed",
-  "externally_connectable": {
-    "matches": [
-      "*://*.differentlife.co.za/*",
-      "*://*.stangenlife.co.za/*",
-      "*://*.lifetech.internal/*"
-    ]
-  }
+  "content_scripts": [{
+    "run_at": "document_start",
+    "matches": ["<all_urls>"],
+    "js": ["inject.js"]
+  }],
+  "web_accessible_resources": ["buzz-api.js"]
 }

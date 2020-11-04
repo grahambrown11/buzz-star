@@ -44,6 +44,7 @@ function uiUpdateStatus() {
         document.getElementById('logout').style.display = '';
         document.getElementById('dial-pad').style.display = '';
         document.getElementById('number').value = chromePhone.getPhoneNumber();
+        document.getElementById('number').focus();
     } else {
         document.getElementById('login').style.display = 'none';
         if (chromePhone.canLoggedIn()) {
@@ -139,10 +140,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.getElementById('number').addEventListener('keyup', function(e) {
+        this.value = this.value.replace(/\D/g,'');
         chromePhone.setPhoneNumber(this.value);
     });
 
     document.getElementById('number').addEventListener('paste', function() {
+        this.value = this.value.replace(/\D/g,'');
         chromePhone.setPhoneNumber(this.value);
     });
 

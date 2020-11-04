@@ -15,6 +15,11 @@
         #settings {
             padding-right: 0;
         }
+        #number {
+            width: 90%;
+            border-bottom-color: #000000;
+            margin-bottom: 4px;
+        }
         .dial-pad input:focus {
             outline:none;
         }
@@ -59,7 +64,7 @@
     </header>
     <div id="dial-pad" class="dial-pad" style="display: none">
         <div class="in-num">
-            <input id="number" class="w3-input w3-left w3-gray" type="text" maxlength="15" style="width: 90%">
+            <input id="number" class="w3-input w3-left w3-gray" type="text" maxlength="15">
             <a id="number-clear" class="clear-btn w3-left"><i class="fa fa-times-circle-o"></i></a>
         </div>
         <a class="w3-button w3-circle w3-black key" data-value="1">

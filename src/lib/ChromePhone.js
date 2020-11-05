@@ -422,24 +422,24 @@ function ChromePhone() {
             checkMic();
 
             chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-                logger.debug('runtime onMessage, request: %o, sender: %o', request, sender);
                 if (request.action) {
                     if (request.action === 'check-mic') {
                         checkMic();
                     } else if (request.action === 'tel-links') {
-                        logger.debug('hijack links check = ' + state.hijackLinks);
                         sendResponse({allowed: state.hijackLinks});
                     } else if (request.action === 'auto' && sender.url) {
-                        logger.debug('auto check from ' + sender.url);
                         var allowed = false;
                         if (state.externalAPIURL && sender.url === state.externalAPIURL) {
                             allowed = true;
                         }
-                        logger.debug('auto check = ' + allowed);
                         sendResponse({allowed: allowed});
                     } else if (request.action === 'call') {
                         chromePhone.setPhoneNumber(request.phoneNumber);
+                    } else {
+                        logger.debug('unknown action runtime onMessage, request: %o, sender: %o', request, sender);
                     }
+                } else {
+                    logger.debug('unhandled runtime onMessage, request: %o, sender: %o', request, sender);
                 }
             });
 

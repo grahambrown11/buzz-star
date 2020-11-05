@@ -1,7 +1,5 @@
 // Buzz* Content Script
 
-console.log("Buzz Content Script Loaded");
-
 (function () {
 
     let auto = false;

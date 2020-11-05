@@ -45,7 +45,9 @@ function ChromePhone() {
             logger.debug('... have access to mic');
             state.micAccess = true;
             stream.getAudioTracks()[0].stop();
-            updateDeviceList();
+            if (state.audioInputs.length === 0) {
+                updateDeviceList();
+            }
         }, function(err) {
             checkMicError(err);
         });
@@ -295,6 +297,7 @@ function ChromePhone() {
             sip_server_host: options.host,
             sip_extension: options.extension,
             sip_password: options.password,
+            sip_user: 'sip:' + options.extension + '@' + options.host,
             pcConfig: {
                 rtcpMuxPolicy : 'negotiate',
                 iceServers: []
@@ -317,12 +320,12 @@ function ChromePhone() {
         cnf.connection.socket = new JsSIP.WebSocketInterface(cnf.sip_server);
         let configuration = {
             sockets: [cnf.connection.socket],
-            uri: 'sip:' + options.extension + '@' + options.host,
-            display_name: options.extension,
-            authorization_user: options.extension,
-            password: options.password,
+            uri: cnf.sip_user,
+            display_name: cnf.sip_extension,
+            authorization_user: cnf.sip_extension,
+            password: cnf.sip_password,
             register: true,
-            registrar_server: 'sip:' + options.host,
+            registrar_server: 'sip:' + cnf.sip_server_host,
             session_timers: true
         };
         logger.debug('JsSIP config: %o', configuration);
@@ -353,18 +356,18 @@ function ChromePhone() {
             updateOverallStatus();
         });
         cnf.connection.jssip.on('registered', function () {
-            logger.debug('registered to ' + cnf.sip_server);
+            logger.debug('registered ' + cnf.sip_user);
             cnf.connection.loggedIn = true;
             cnf.connection.status = 'onhook';
             updateOverallStatus();
         });
         cnf.connection.jssip.on('unregistered', function () {
-            logger.debug('unregistered from ' + cnf.sip_server);
+            logger.debug('unregistered ' + cnf.sip_user);
             state.errorMessage = 'No longer registered - incoming calls will fail';
             updatePopupViewStatus();
         });
         cnf.connection.jssip.on('registrationFailed', function (e) {
-            logger.debug('registrationFailed on ' + cnf.sip_server);
+            logger.debug('registrationFailed on ' + cnf.sip_user);
             showError('Registration Failed: ' + e.cause);
             updatePopupViewStatus();
         });
@@ -372,14 +375,14 @@ function ChromePhone() {
             // ignore our sessions (outgoing calls)
             if (data.originator === 'local')
                 return;
-            logger.debug('newRTCSession from ' + cnf.sip_server);
+            logger.debug('newRTCSession from ' + cnf.sip_server_host);
             incomingCall(data, cnf.pcConfig);
         });
         cnf.connection.jssip.on('newMessage', function () {
-            logger.debug('newMessage from ' + cnf.sip_server);
+            logger.debug('newMessage from ' + cnf.sip_server_host);
         });
         // NOTE: skipping registrationExpiring event so JsSIP handles re-register
-        logger.debug('jssip created for ' + cnf.sip_server);
+        logger.debug('jssip created for ' + cnf.sip_server_host);
         state.servers.push(cnf);
         return true;
     }
@@ -557,7 +560,6 @@ function ChromePhone() {
         state.fromExternal = external;
         state.errorMessage = undefined;
         state.infoMessage = undefined;
-        updateDeviceList();
         for (let srv=0; srv < state.servers.length; srv++) {
             if (state.servers[srv].connection.jssip && state.servers[srv].connection.jssip.isConnected()) {
                 logger.debug('jssip already connected to %s, stopping 1st ...', state.servers[srv].sip_server);

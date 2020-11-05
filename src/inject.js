@@ -3,10 +3,11 @@
 (function () {
 
     let auto = false;
+    let tel_links = false;
     let port = undefined;
 
-    chrome.runtime.sendMessage({action: 'auto'}, function(response) {
-        if (response.allowed) {
+    chrome.runtime.sendMessage({action: 'inject'}, function(response) {
+        if (response.api_allowed) {
             console.log('Allow External BuzzAPI');
             auto = true;
             if (!window.buzzApi) {
@@ -16,6 +17,9 @@
                 console.log('Inject Buzz API Script - ' + s.src);
                 (document.head || document.documentElement).appendChild(s);
             }
+        }
+        if (response.tel_links) {
+            tel_links = true;
         }
     });
 
@@ -46,24 +50,22 @@
     }, false);
 
     document.addEventListener('DOMContentLoaded', function () {
-        chrome.runtime.sendMessage({action: 'tel-links'}, function(response) {
-            if (response.allowed) {
-                document.querySelectorAll('a[href^="tel:"]').forEach(function (e) {
-                    e.addEventListener('click', function (t) {
-                        let phoneNumber = this.href.substr(4).replace(/\D/g, '');
-                        if (phoneNumber.length > 0) {
-                            chrome.runtime.sendMessage({
-                                action: 'call',
-                                phoneNumber: phoneNumber
-                            });
-                            console.log('Sent Number to Buzz*');
-                            t.preventDefault();
-                            return false;
-                        }
-                    });
+        if (tel_links) {
+            document.querySelectorAll('a[href^="tel:"]').forEach(function (e) {
+                e.addEventListener('click', function (t) {
+                    let phoneNumber = this.href.substr(4).replace(/\D/g, '');
+                    if (phoneNumber.length > 0) {
+                        chrome.runtime.sendMessage({
+                            action: 'call',
+                            phoneNumber: phoneNumber
+                        });
+                        console.log('Sent Number to Buzz*');
+                        t.preventDefault();
+                        return false;
+                    }
                 });
-            }
-        });
+            });
+        }
     });
 
 })();

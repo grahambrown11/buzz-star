@@ -44,16 +44,15 @@ function save_options_ui() {
     sync_opts.hijack_links = document.getElementById('hijack_links').checked;
     local_opts.media_input = document.getElementById('media_input').value;
     local_opts.media_output = document.getElementById('media_output').value;
-    chrome.extension.getBackgroundPage().chromePhone.shutdown();
     chrome.storage.local.set(local_opts, function() {
         chrome.storage.sync.set(sync_opts, function() {
             // Update status to let user know options were saved.
             let status = document.getElementById('status');
             status.textContent = 'Options saved.';
-            chrome.extension.getBackgroundPage().chromePhone.delayedInit(sync_opts, local_opts);
             setTimeout(function() {
                 status.textContent = '';
             }, 5000);
+            chrome.extension.getBackgroundPage().chromePhone.updateOptions(sync_opts, local_opts);
         });
     });
 }

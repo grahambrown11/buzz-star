@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Buzz* for Google Chrome™",
+  "name": "Buzz* - Phone for Google Chrome™",
   "short_name": "Buzz*",
-  "description": "A WebRTC Phone for Asterisk and for Google Chrome™",
+  "description": "A WebRTC Phone for Asterisk and Google Chrome™",
   "version": "$$version$$",
   "permissions": [
     "storage",
@@ -13,13 +13,19 @@
     "scripts": ["options.js", "chrome-phone.js"]
   },
   "icons": {
-    "16": "img/phone-blank-16.png",
-    "48": "img/phone-blank-48.png",
-    "128": "img/phone-blank-128.png"
+    "16": "img/icon-blue-16.png",
+    "32": "img/icon-blue-32.png",
+    "48": "img/icon-blue-48.png",
+    "128": "img/icon-blue-128.png"
   },
   "browser_action": {
-    "default_icon": "img/phone-blank-128.png",
-    "default_title": "Buzz*",
+    "default_icon": {
+      "16": "img/icon-blue-16.png",
+      "32": "img/icon-blue-32.png",
+      "48": "img/icon-blue-48.png",
+      "128": "img/icon-blue-128.png"
+    },
+    "default_title": "Buzz* - Phone for Google Chrome™",
     "default_popup": "popup.html"
   },
   "options_ui": {

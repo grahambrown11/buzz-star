@@ -1,8 +1,8 @@
 {
   "name": "buzz-star",
-  "version": "0.13.1",
+  "version": "1.0.0",
   "private": true,
-  "description": "Buzz* a WebRTC Phone for Asterisk and for Google Chrome™ / Chromium",
+  "description": "Buzz* a WebRTC Phone for Asterisk and Google Chrome™ / Chromium",
   "author": "Graham Brown",
   "license": "",
   "main": "lib/ChromePhone.js",

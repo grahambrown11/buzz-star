@@ -175,7 +175,7 @@ function ChromePhone() {
                 type: 'basic',
                 title: title,
                 message: message || '',
-                iconUrl: 'img/phone-blank.png',
+                iconUrl: 'img/icon-blue-128.png',
                 buttons: showAnswerButtons ? [{title: 'Answer'}, {title: 'Reject'}] : [],
                 requireInteraction: showAnswerButtons
             }, function (id) {
@@ -265,11 +265,26 @@ function ChromePhone() {
 
     function updateOverallStatus() {
         let status = chromePhone.getStatus();
-        let icon = 'img/phone-blank.png';
+        let icon = {
+            "16": "img/icon-blue-16.png",
+            "32": "img/icon-blue-32.png",
+            "48": "img/icon-blue-48.png",
+            "128": "img/icon-blue-128.png"
+        };
         if (status === 'offhook' || status === 'ringing') {
-            icon = 'img/phone-red.png';
+            icon = {
+                "16": "img/icon-red-16.png",
+                "32": "img/icon-red-32.png",
+                "48": "img/icon-red-48.png",
+                "128": "img/icon-red-128.png"
+            };
         } else if (status === 'onhook') {
-            icon = 'img/phone-green.png';
+            icon = {
+                "16": "img/icon-green-16.png",
+                "32": "img/icon-green-32.png",
+                "48": "img/icon-green-48.png",
+                "128": "img/icon-green-128.png"
+            };
         }
         if ('chrome' in window && chrome.browserAction) {
             chrome.browserAction.setIcon({path: icon});
@@ -406,7 +421,13 @@ function ChromePhone() {
         logger.debug('init');
         if ('chrome' in window && chrome.extension) {
             logger.debug('Is a chrome extension');
-            chrome.browserAction.setIcon({path: 'img/phone-blank.png'});
+            chrome.browserAction.setIcon({path: {
+                    "16": "img/icon-blue-16.png",
+                    "32": "img/icon-blue-32.png",
+                    "48": "img/icon-blue-48.png",
+                    "128": "img/icon-blue-128.png"
+                }
+            });
 
             // listen for media device changes
             navigator.mediaDevices.ondevicechange = function() {

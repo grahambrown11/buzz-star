@@ -9,12 +9,6 @@
         .chrome-phone {
             width: 200px;
         }
-        .head-margin {
-            margin: 10px 0;
-        }
-        #settings {
-            padding-right: 0;
-        }
         #number {
             width: 90%;
             border-bottom-color: #000000;
@@ -55,11 +49,8 @@
 <body class="w3-gray">
 <div class="chrome-phone w3-container w3-topbar w3-border-black">
     <header class="w3-row">
-        <div class="w3-col s8">
-            <h3>Buzz*</h3>
-        </div>
-        <div class="w3-col s4 w3-right-align head-margin">
-            <a id="settings" title="settings" class="w3-button w3-hover-none"><i class="fa fa-cog"></i></a>
+        <div class="w3-col s12 w3-center">
+            <img src="img/logo.png">
         </div>
     </header>
     <div id="dial-pad" class="dial-pad" style="display: none">
@@ -131,6 +122,7 @@
             <a id="login" title="login" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none"><i class="fa fa-sign-in"></i></a>
             <a id="logout" title="logout" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none"><i class="fa fa-sign-out"></i></a>
             <a id="mic-access" title="mic access" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none" target="_blank"><i class="fa fa-microphone-slash"></i></a>
+            <a id="settings" title="settings" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black"><i class="fa fa-cog"></i></a>
         </div>
         <div id="error" class="w3-panel w3-pale-red w3-leftbar w3-border-red" style="display: none"></div>
         <div id="info" class="w3-panel w3-pale-yellow w3-leftbar w3-border-yellow" style="display: none"></div>

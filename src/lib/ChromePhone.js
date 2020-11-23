@@ -45,7 +45,9 @@ function ChromePhone() {
             logger.debug('... have access to mic');
             state.micAccess = true;
             stream.getAudioTracks()[0].stop();
-            updateDeviceList();
+            if (state.audioInputs.length === 0) {
+                updateDeviceList();
+            }
         }, function(err) {
             checkMicError(err);
         });
@@ -173,7 +175,7 @@ function ChromePhone() {
                 type: 'basic',
                 title: title,
                 message: message || '',
-                iconUrl: 'img/phone-blank.png',
+                iconUrl: 'img/icon-blue-128.png',
                 buttons: showAnswerButtons ? [{title: 'Answer'}, {title: 'Reject'}] : [],
                 requireInteraction: showAnswerButtons
             }, function (id) {
@@ -263,11 +265,26 @@ function ChromePhone() {
 
     function updateOverallStatus() {
         let status = chromePhone.getStatus();
-        let icon = 'img/phone-blank.png';
+        let icon = {
+            "16": "img/icon-blue-16.png",
+            "32": "img/icon-blue-32.png",
+            "48": "img/icon-blue-48.png",
+            "128": "img/icon-blue-128.png"
+        };
         if (status === 'offhook' || status === 'ringing') {
-            icon = 'img/phone-red.png';
+            icon = {
+                "16": "img/icon-red-16.png",
+                "32": "img/icon-red-32.png",
+                "48": "img/icon-red-48.png",
+                "128": "img/icon-red-128.png"
+            };
         } else if (status === 'onhook') {
-            icon = 'img/phone-green.png';
+            icon = {
+                "16": "img/icon-green-16.png",
+                "32": "img/icon-green-32.png",
+                "48": "img/icon-green-48.png",
+                "128": "img/icon-green-128.png"
+            };
         }
         if ('chrome' in window && chrome.browserAction) {
             chrome.browserAction.setIcon({path: icon});
@@ -275,9 +292,10 @@ function ChromePhone() {
         updatePopupViewStatus();
     }
 
-    function createSipServer(options) {
-        if (!options.host || !options.extension) {
-            return false;
+    function serverFromOptions(options) {
+        if (typeof options === 'undefined' || typeof options.host === 'undefined' ||
+                options.host.trim().length === 0) {
+            return '';
         }
         let server = 'wss://' + options.host;
         if (options.port) {
@@ -290,11 +308,20 @@ function ChromePhone() {
         } else {
             server += '/ws';
         }
+        return server;
+    }
+
+    function createSipServer(options) {
+        let server = serverFromOptions(options);
+        if (server.length === 0 || typeof options.extension === 'undefined' || options.extension.trim().length === 0) {
+            return false;
+        }
         let cnf = {
             sip_server: server,
             sip_server_host: options.host,
             sip_extension: options.extension,
             sip_password: options.password,
+            sip_user: 'sip:' + options.extension + '@' + options.host,
             pcConfig: {
                 rtcpMuxPolicy : 'negotiate',
                 iceServers: []
@@ -317,12 +344,12 @@ function ChromePhone() {
         cnf.connection.socket = new JsSIP.WebSocketInterface(cnf.sip_server);
         let configuration = {
             sockets: [cnf.connection.socket],
-            uri: 'sip:' + options.extension + '@' + options.host,
-            display_name: options.extension,
-            authorization_user: options.extension,
-            password: options.password,
+            uri: cnf.sip_user,
+            display_name: cnf.sip_extension,
+            authorization_user: cnf.sip_extension,
+            password: cnf.sip_password,
             register: true,
-            registrar_server: 'sip:' + options.host,
+            registrar_server: 'sip:' + cnf.sip_server_host,
             session_timers: true
         };
         logger.debug('JsSIP config: %o', configuration);
@@ -353,18 +380,18 @@ function ChromePhone() {
             updateOverallStatus();
         });
         cnf.connection.jssip.on('registered', function () {
-            logger.debug('registered to ' + cnf.sip_server);
+            logger.debug('registered ' + cnf.sip_user);
             cnf.connection.loggedIn = true;
             cnf.connection.status = 'onhook';
             updateOverallStatus();
         });
         cnf.connection.jssip.on('unregistered', function () {
-            logger.debug('unregistered from ' + cnf.sip_server);
+            logger.debug('unregistered ' + cnf.sip_user);
             state.errorMessage = 'No longer registered - incoming calls will fail';
             updatePopupViewStatus();
         });
         cnf.connection.jssip.on('registrationFailed', function (e) {
-            logger.debug('registrationFailed on ' + cnf.sip_server);
+            logger.debug('registrationFailed on ' + cnf.sip_user);
             showError('Registration Failed: ' + e.cause);
             updatePopupViewStatus();
         });
@@ -372,14 +399,14 @@ function ChromePhone() {
             // ignore our sessions (outgoing calls)
             if (data.originator === 'local')
                 return;
-            logger.debug('newRTCSession from ' + cnf.sip_server);
+            logger.debug('newRTCSession from ' + cnf.sip_server_host);
             incomingCall(data, cnf.pcConfig);
         });
         cnf.connection.jssip.on('newMessage', function () {
-            logger.debug('newMessage from ' + cnf.sip_server);
+            logger.debug('newMessage from ' + cnf.sip_server_host);
         });
         // NOTE: skipping registrationExpiring event so JsSIP handles re-register
-        logger.debug('jssip created for ' + cnf.sip_server);
+        logger.debug('jssip created for ' + cnf.sip_server_host);
         state.servers.push(cnf);
         return true;
     }
@@ -391,27 +418,17 @@ function ChromePhone() {
     };
 
     this.init = function (sync_opts, local_opts) {
-        logger.debug('init(sync_opts:%o, local_opts:%o)', sync_opts, local_opts);
-        state.errorMessage = undefined;
-
+        logger.debug('init');
         if ('chrome' in window && chrome.extension) {
             logger.debug('Is a chrome extension');
-            chrome.browserAction.setIcon({path: 'img/phone-blank.png'});
-
-            state.hijackLinks = sync_opts.hijack_links;
-            state.externalAPIURL = undefined;
-            if (sync_opts.external_api) {
-                state.externalAPIURL = sync_opts.external_api;
-            }
-
-            if (local_opts) {
-                if (local_opts.media_input) {
-                    state.audioInputId = local_opts.media_input;
+            chrome.browserAction.setIcon({path: {
+                    "16": "img/icon-blue-16.png",
+                    "32": "img/icon-blue-32.png",
+                    "48": "img/icon-blue-48.png",
+                    "128": "img/icon-blue-128.png"
                 }
-                if (local_opts.media_output) {
-                    state.audioOutputId = local_opts.media_output;
-                }
-            }
+            });
+
             // listen for media device changes
             navigator.mediaDevices.ondevicechange = function() {
                 updateDeviceList();
@@ -419,24 +436,25 @@ function ChromePhone() {
             checkMic();
 
             chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-                logger.debug('runtime onMessage, request: %o, sender: %o', request, sender);
                 if (request.action) {
                     if (request.action === 'check-mic') {
                         checkMic();
-                    } else if (request.action === 'tel-links') {
-                        logger.debug('hijack links check = ' + state.hijackLinks);
-                        sendResponse({allowed: state.hijackLinks});
-                    } else if (request.action === 'auto' && sender.url) {
-                        logger.debug('auto check from ' + sender.url);
-                        var allowed = false;
+                    } else if (request.action === 'inject') {
+                        var api_allowed = false;
                         if (state.externalAPIURL && sender.url === state.externalAPIURL) {
-                            allowed = true;
+                            api_allowed = true;
                         }
-                        logger.debug('auto check = ' + allowed);
-                        sendResponse({allowed: allowed});
+                        sendResponse({
+                            api_allowed: api_allowed,
+                            tel_links: state.hijackLinks
+                        });
                     } else if (request.action === 'call') {
                         chromePhone.setPhoneNumber(request.phoneNumber);
+                    } else {
+                        logger.debug('unknown action runtime onMessage, request: %o, sender: %o', request, sender);
                     }
+                } else {
+                    logger.debug('unhandled runtime onMessage, request: %o, sender: %o', request, sender);
                 }
             });
 
@@ -458,7 +476,7 @@ function ChromePhone() {
                         } else if (msg.action === 'login') {
                             chromePhone.login(true);
                         } else if (msg.action === 'set-settings') {
-                            chromePhone.updateOptions(msg.settings);
+                            chromePhone.updateSettingsScreen(msg.settings);
                         }
                     }
                 });
@@ -485,40 +503,85 @@ function ChromePhone() {
             });
         }
 
-        let hasSettings = false;
-        if (sync_opts.sip_1 && sync_opts.sip_1.host) {
-            logger.debug('Init Server 1');
-            if (createSipServer(sync_opts.sip_1)) {
-                hasSettings = true;
-            } else {
-                logger.warn('Server 1 Missing settings');
-            }
-        }
-        if (sync_opts.sip_2 && sync_opts.sip_2.host) {
-            logger.debug('Init Server 2');
-            if (createSipServer(sync_opts.sip_2)) {
-                hasSettings = true;
-            } else {
-                logger.debug('Server 2 Missing settings');
-            }
-        }
-        if (!hasSettings) {
-            state.errorMessage = 'Missing settings';
-            logger.error('Missing settings');
-            return;
-        }
-
-        logger.debug('auto_login: %s', sync_opts.auto_login);
-        if (sync_opts.auto_login) {
-            this.login(false);
-        }
+        chromePhone.updateOptions(sync_opts, local_opts);
 
     };
 
-    this.delayedInit = function (sync_opts, local_opts) {
-        setTimeout(function() {
-            chromePhone.init(sync_opts, local_opts);
-        }, 200);
+    this.updateOptions = function (sync_opts, local_opts) {
+
+        logger.debug('updateOptions(sync_opts:%o, local_opts:%o)', sync_opts, local_opts);
+        state.errorMessage = undefined;
+
+        state.hijackLinks = sync_opts.hijack_links;
+        state.externalAPIURL = undefined;
+        if (sync_opts.external_api) {
+            state.externalAPIURL = sync_opts.external_api;
+        }
+
+        if (local_opts) {
+            if (local_opts.media_input) {
+                chromePhone.setAudioInput(local_opts.media_input);
+            }
+            if (local_opts.media_output) {
+                chromePhone.setAudioOutput(local_opts.media_output);
+            }
+        }
+
+        let createSipServers = false;
+        let timeout = 50;
+        if (state.servers.length > 0) {
+            let server = serverFromOptions(sync_opts.sip_1);
+            if (server !== state.servers[0].sip_server &&
+                    sync_opts.sip_1.extension !== state.servers[0].sip_extension &&
+                    sync_opts.sip_1.password !== state.servers[0].sip_password) {
+                createSipServers = true;
+            }
+            server = serverFromOptions(sync_opts.sip_2);
+            if (server.length > 0 && state.servers.length === 1) {
+                createSipServers = true;
+            } else if (server.length === 0 && state.servers.length === 2) {
+                createSipServers = true;
+            } else if (server !== state.servers[1].sip_server &&
+                sync_opts.sip_2.extension !== state.servers[1].sip_extension &&
+                sync_opts.sip_2.password !== state.servers[1].sip_password) {
+                createSipServers = true;
+            }
+
+            if (createSipServers) {
+                logger.debug("servers changing, shutdown 1st");
+                timeout = 2000;
+                chromePhone.shutdown();
+            }
+        } else {
+            createSipServers = true;
+        }
+
+        if (createSipServers) {
+            setTimeout(function() {
+                let hasSettings = false;
+                logger.debug('Init Server 1');
+                if (createSipServer(sync_opts.sip_1)) {
+                    hasSettings = true;
+                } else {
+                    logger.warn('Server 1 Missing settings');
+                }
+                logger.debug('Init Server 2');
+                if (createSipServer(sync_opts.sip_2)) {
+                    hasSettings = true;
+                } else {
+                    logger.debug('Server 2 Missing settings');
+                }
+                if (!hasSettings) {
+                    state.errorMessage = 'Missing settings';
+                    logger.error('Missing settings');
+                    return;
+                }
+                logger.debug('auto_login: %s', sync_opts.auto_login);
+                if (sync_opts.auto_login) {
+                    chromePhone.login(false);
+                }
+            }, timeout);
+        }
     }
 
     function updateDeviceList() {
@@ -557,7 +620,6 @@ function ChromePhone() {
         state.fromExternal = external;
         state.errorMessage = undefined;
         state.infoMessage = undefined;
-        updateDeviceList();
         for (let srv=0; srv < state.servers.length; srv++) {
             if (state.servers[srv].connection.jssip && state.servers[srv].connection.jssip.isConnected()) {
                 logger.debug('jssip already connected to %s, stopping 1st ...', state.servers[srv].sip_server);
@@ -810,9 +872,9 @@ function ChromePhone() {
 
     this.setAudioInput = function(deviceId) {
         if (deviceId) {
+            state.audioInputId = deviceId;
             for (let i = 0; i < state.audioInputs.length; i++) {
                 if (deviceId === state.audioInputs[i].id) {
-                    state.audioInputId = deviceId;
                     state.audioInput = deviceId;
                     logger.debug('set audio input to %s', state.audioInput);
                     return;
@@ -829,9 +891,9 @@ function ChromePhone() {
 
     this.setAudioOutput = function(deviceId) {
         if (deviceId) {
+            state.audioOutputId = deviceId;
             for (let i = 0; i < state.audioOutputs.length; i++) {
                 if (deviceId === state.audioOutputs[i].id) {
-                    state.audioOutputId = deviceId;
                     state.audioOutput.setSinkId(deviceId);
                     tone.setAudioSinkId(deviceId);
                     logger.debug('set audio output to %s', state.audioOutputId);
@@ -863,7 +925,7 @@ function ChromePhone() {
         }
     };
 
-    this.updateOptions = function(settings) {
+    this.updateSettingsScreen = function(settings) {
         if (state.optionsDoc) {
             logger.debug('Got settings from External API');
             function setValue(id, val) {
@@ -874,14 +936,12 @@ function ChromePhone() {
                 }
             }
             function setServer(id, settings) {
-                if (settings) {
-                    setValue('sip_' + id + '_host', settings.host);
-                    setValue('sip_' + id + '_port', settings.port);
-                    setValue('sip_' + id + '_path', settings.path);
-                    setValue('sip_' + id + '_extension', settings.extension);
-                    setValue('sip_' + id + '_password', settings.password);
-                    setValue('sip_' + id + '_ice', settings.ice);
-                }
+                setValue('sip_' + id + '_host', settings ? settings.host : '');
+                setValue('sip_' + id + '_port', settings ? settings.port : '');
+                setValue('sip_' + id + '_path', settings ? settings.path : '');
+                setValue('sip_' + id + '_extension', settings ? settings.extension : '');
+                setValue('sip_' + id + '_password', settings ? settings.password : '');
+                setValue('sip_' + id + '_ice', settings ? settings.ice : '');
             }
             setServer('1', settings.sip_1);
             setServer('2', settings.sip_2);

@@ -140,13 +140,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.getElementById('number').addEventListener('keyup', function(e) {
-        this.value = this.value.replace(/\D/g,'');
-        chromePhone.setPhoneNumber(this.value);
+        this.value = chromePhone.setPhoneNumber(this.value);
     });
 
     document.getElementById('number').addEventListener('paste', function() {
-        this.value = this.value.replace(/\D/g,'');
-        chromePhone.setPhoneNumber(this.value);
+        this.value = chromePhone.setPhoneNumber(this.value);
     });
 
     document.getElementById('number-clear').addEventListener('click', function() {

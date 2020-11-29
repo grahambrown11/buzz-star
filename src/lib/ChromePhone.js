@@ -57,7 +57,7 @@ function ChromePhone() {
         logger.warn('Error: %s - %s', err.name, err.message);
         if ('chrome' in window && chrome.extension && (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0)) {
             state.micAccess = false;
-            window.open(chrome.extension.getURL('microphone.html'), "mic_popup", "width=500,height=300,status=no,scrollbars=no,resizable=no");
+            window.open(chrome.extension.getURL('microphone.html'), 'mic_popup', 'width=500,height=300,status=no,scrollbars=no,resizable=no');
         }
     }
 
@@ -133,7 +133,7 @@ function ChromePhone() {
         state.incoming_answer = true;
         updateOverallStatus();
         function startIncomingCallNotification() {
-            showNotification("Incoming Call", cli, true);
+            showNotification('Incoming Call', cli, true);
             tone.startRinging();
         }
         // get the sidebar to auto answer if the request was from there...
@@ -209,7 +209,7 @@ function ChromePhone() {
     }
 
     function notifyExternalOfError() {
-        notifyExternal({error: state.errorMessage});
+        notifyExternal({action: 'error', error: state.errorMessage});
     }
 
     function notifyExternal(msg) {
@@ -263,28 +263,22 @@ function ChromePhone() {
         }
     }
 
+    function getIcons(color) {
+        return {
+            '16': 'img/icon-' + color + '-16.png',
+            '32': 'img/icon-' + color + '-32.png',
+            '48': 'img/icon-' + color + '-48.png',
+            '128': 'img/icon-' + color + '-128.png'
+        };
+    }
+
     function updateOverallStatus() {
         let status = chromePhone.getStatus();
-        let icon = {
-            "16": "img/icon-blue-16.png",
-            "32": "img/icon-blue-32.png",
-            "48": "img/icon-blue-48.png",
-            "128": "img/icon-blue-128.png"
-        };
+        let icon = getIcons('blue');
         if (status === 'offhook' || status === 'ringing') {
-            icon = {
-                "16": "img/icon-red-16.png",
-                "32": "img/icon-red-32.png",
-                "48": "img/icon-red-48.png",
-                "128": "img/icon-red-128.png"
-            };
+            icon = getIcons('red');
         } else if (status === 'onhook') {
-            icon = {
-                "16": "img/icon-green-16.png",
-                "32": "img/icon-green-32.png",
-                "48": "img/icon-green-48.png",
-                "128": "img/icon-green-128.png"
-            };
+            icon = getIcons('green');
         }
         if ('chrome' in window && chrome.browserAction) {
             chrome.browserAction.setIcon({path: icon});
@@ -417,17 +411,18 @@ function ChromePhone() {
         state.servers = [];
     };
 
+    function checkExternalAPIURL(url) {
+        if (typeof state.externalAPIURL !== 'undefined' && typeof url !== 'undefined') {
+            return  url === state.externalAPIURL;
+        }
+        return false;
+    }
+
     this.init = function (sync_opts, local_opts) {
         logger.debug('init');
         if ('chrome' in window && chrome.extension) {
             logger.debug('Is a chrome extension');
-            chrome.browserAction.setIcon({path: {
-                    "16": "img/icon-blue-16.png",
-                    "32": "img/icon-blue-32.png",
-                    "48": "img/icon-blue-48.png",
-                    "128": "img/icon-blue-128.png"
-                }
-            });
+            chrome.browserAction.setIcon({path: getIcons('blue')});
 
             // listen for media device changes
             navigator.mediaDevices.ondevicechange = function() {
@@ -436,13 +431,13 @@ function ChromePhone() {
             checkMic();
 
             chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-                if (request.action) {
+                if (typeof request.action !== 'undefined') {
                     if (request.action === 'check-mic') {
                         checkMic();
                     } else if (request.action === 'inject') {
                         var api_allowed = false;
-                        if (state.externalAPIURL && sender.url === state.externalAPIURL) {
-                            api_allowed = true;
+                        if (typeof sender !== 'undefined') {
+                            api_allowed = checkExternalAPIURL(sender.url);
                         }
                         sendResponse({
                             api_allowed: api_allowed,
@@ -460,32 +455,35 @@ function ChromePhone() {
 
             chrome.runtime.onConnect.addListener(function(port) {
                 logger.debug('onConnect, port: %o', port);
-                state.externalAPIPort = port; // for now the last sidebar connect wins...
-                port.onMessage.addListener(function (msg) {
-                    logger.debug('onMessage (Content Script): %o', msg);
-                    if (msg === 'ping') {
-                        state.externalAPIPort.postMessage('pong');
-                    } else if (typeof msg.action !== 'undefined') {
-                        if (msg.action === 'ping') {
-                            logger.debug('sending pong');
-                            state.externalAPIPort.postMessage({action: 'pong'});
-                        } else if (msg.action === 'call') {
-                            chromePhone.callNumber(msg.phoneNumber, true);
-                        } else if (msg.action === 'answer' && state.call) {
-                            chromePhone.answer();
-                        } else if (msg.action === 'login') {
-                            chromePhone.login(true);
-                        } else if (msg.action === 'set-settings') {
-                            chromePhone.updateSettingsScreen(msg.settings);
+                if (typeof port.sender !== 'undefined' && checkExternalAPIURL(port.sender.url)) {
+                    logger.debug('External API connection allowed');
+                    state.externalAPIPort = port; // for now the last sidebar connect wins...
+                    port.onMessage.addListener(function (msg) {
+                        logger.debug('onMessage (Content Script): %o', msg);
+                        if (msg === 'ping') {
+                            state.externalAPIPort.postMessage('pong');
+                        } else if (typeof msg.action !== 'undefined') {
+                            if (msg.action === 'ping') {
+                                logger.debug('sending pong');
+                                state.externalAPIPort.postMessage({action: 'pong'});
+                            } else if (msg.action === 'call') {
+                                chromePhone.callNumber(msg.phoneNumber, true);
+                            } else if (msg.action === 'answer' && state.call) {
+                                chromePhone.answer();
+                            } else if (msg.action === 'login') {
+                                chromePhone.login(true);
+                            } else if (msg.action === 'set-settings') {
+                                chromePhone.updateSettingsScreen(msg.settings);
+                            }
                         }
-                    }
-                });
-                port.onDisconnect.addListener(function(disconnectedPort) {
-                    logger.debug('Runtime connection disconnected');
-                    if (disconnectedPort === state.externalAPIPort) {
-                        state.externalAPIPort = undefined;
-                    }
-                });
+                    });
+                    port.onDisconnect.addListener(function (disconnectedPort) {
+                        logger.debug('Runtime connection disconnected');
+                        if (disconnectedPort === state.externalAPIPort) {
+                            state.externalAPIPort = undefined;
+                        }
+                    });
+                }
             });
 
             chrome.notifications.onButtonClicked.addListener(function (id, button) {
@@ -536,19 +534,22 @@ function ChromePhone() {
                     sync_opts.sip_1.password !== state.servers[0].sip_password) {
                 createSipServers = true;
             }
-            server = serverFromOptions(sync_opts.sip_2);
-            if (server.length > 0 && state.servers.length === 1) {
-                createSipServers = true;
-            } else if (server.length === 0 && state.servers.length === 2) {
-                createSipServers = true;
-            } else if (server !== state.servers[1].sip_server &&
-                sync_opts.sip_2.extension !== state.servers[1].sip_extension &&
-                sync_opts.sip_2.password !== state.servers[1].sip_password) {
-                createSipServers = true;
+            if (!createSipServers) {
+                server = serverFromOptions(sync_opts.sip_2);
+                if (server.length > 0 && state.servers.length === 1) {
+                    createSipServers = true;
+                } else if (server.length === 0 && state.servers.length === 2) {
+                    createSipServers = true;
+                } else if (server.length > 0 && state.servers.length === 2 &&
+                    server !== state.servers[1].sip_server &&
+                    sync_opts.sip_2.extension !== state.servers[1].sip_extension &&
+                    sync_opts.sip_2.password !== state.servers[1].sip_password) {
+                    createSipServers = true;
+                }
             }
 
             if (createSipServers) {
-                logger.debug("servers changing, shutdown 1st");
+                logger.debug('servers changing, shutdown 1st');
                 timeout = 2000;
                 chromePhone.shutdown();
             }
@@ -621,7 +622,7 @@ function ChromePhone() {
         state.errorMessage = undefined;
         state.infoMessage = undefined;
         for (let srv=0; srv < state.servers.length; srv++) {
-            if (state.servers[srv].connection.jssip && state.servers[srv].connection.jssip.isConnected()) {
+            if (state.servers[srv].connection.jssip && state.servers[srv].connection.jssip.isConnected() && !external) {
                 logger.debug('jssip already connected to %s, stopping 1st ...', state.servers[srv].sip_server);
                 state.servers[srv].connection.jssip.stop();
             }
@@ -650,22 +651,22 @@ function ChromePhone() {
         if (this.isOnCall()) return;
         state.fromExternal = external;
         if (!phoneNumber) {
-            logger.warn("No Phone Number");
-            showError("No Phone Number");
+            logger.warn('No Phone Number');
+            showError('No Phone Number');
             return;
         }
         if (state.servers.length === 0) {
-            logger.warn("No servers setup");
-            notifyExternal({error: 'No servers setup'});
+            logger.warn('No servers setup');
+            notifyExternal({action: 'error', error: 'No servers setup'});
             return;
         }
         let srv = state.servers[0];
         if (!srv.connection.loggedIn && state.servers.length > 1) {
-            logger.debug("Server 1 not logged in, using server 2");
+            logger.debug('Server 1 not logged in, using server 2');
             srv = state.servers[1];
         }
         if (external && !srv.connection.loggedIn) {
-            notifyExternal({error: 'Not Logged In'});
+            notifyExternal({action: 'error', error: 'Not Logged In'});
             return;
         }
         // call events
@@ -802,7 +803,8 @@ function ChromePhone() {
     };
 
     this.setPhoneNumber = function(number) {
-        state.phoneNumber = number;
+        state.phoneNumber = number.replace(/\D|\*|#/g,'');
+        return state.phoneNumber;
     };
 
     this.getStatus = function() {
@@ -912,7 +914,7 @@ function ChromePhone() {
 
     this.connectedToExternalAPI = function() {
         logger.debug('externalAPIPort type: ' + (typeof state.externalAPIPort));
-        return typeof state.externalAPIPort !== "undefined";
+        return typeof state.externalAPIPort !== 'undefined';
     };
 
     this.loadSettingsFromExternalAPI = function(optionsDoc) {
@@ -968,18 +970,18 @@ function Tone(context) {
     this.ringing = 0;
 
     let dtmfFrequencies = {
-        "1": {f1: 697, f2: 1209},
-        "2": {f1: 697, f2: 1336},
-        "3": {f1: 697, f2: 1477},
-        "4": {f1: 770, f2: 1209},
-        "5": {f1: 770, f2: 1336},
-        "6": {f1: 770, f2: 1477},
-        "7": {f1: 852, f2: 1209},
-        "8": {f1: 852, f2: 1336},
-        "9": {f1: 852, f2: 1477},
-        "*": {f1: 941, f2: 1209},
-        "0": {f1: 941, f2: 1336},
-        "#": {f1: 941, f2: 1477}
+        '1': {f1: 697, f2: 1209},
+        '2': {f1: 697, f2: 1336},
+        '3': {f1: 697, f2: 1477},
+        '4': {f1: 770, f2: 1209},
+        '5': {f1: 770, f2: 1336},
+        '6': {f1: 770, f2: 1477},
+        '7': {f1: 852, f2: 1209},
+        '8': {f1: 852, f2: 1336},
+        '9': {f1: 852, f2: 1477},
+        '*': {f1: 941, f2: 1209},
+        '0': {f1: 941, f2: 1336},
+        '#': {f1: 941, f2: 1477}
     };
 
     this.setAudioSinkId = function(deviceId) {
@@ -994,7 +996,7 @@ function Tone(context) {
         this.gainNode = this.context.createGain();
         this.gainNode.gain.value = 0.25;
         this.filter = this.context.createBiquadFilter();
-        this.filter.type = "lowpass";
+        this.filter.type = 'lowpass';
         this.filter.frequency.value = 8000;
         this.osc1.connect(this.gainNode);
         this.osc2.connect(this.gainNode);
@@ -1103,7 +1105,7 @@ function Tone(context) {
 
 window.chromePhone = new ChromePhone();
 // if a chrome extension
-if ("chrome" in window && chrome.extension) {
+if ('chrome' in window && chrome.extension) {
     if (chrome.storage) {
         chrome.storage.local.get(local_opts, function (local_items) {
             chrome.storage.sync.get(sync_opts, function (sync_items) {

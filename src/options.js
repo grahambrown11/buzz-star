@@ -23,7 +23,8 @@ let sync_opts = {
 
 let local_opts = {
     media_input: '',
-    media_output: ''
+    media_output: '',
+    ring_output: ''
 };
 
 function save_options_ui() {
@@ -44,6 +45,7 @@ function save_options_ui() {
     sync_opts.hijack_links = document.getElementById('hijack_links').checked;
     local_opts.media_input = document.getElementById('media_input').value;
     local_opts.media_output = document.getElementById('media_output').value;
+    local_opts.ring_output = document.getElementById('ring_output').value;
     chrome.storage.local.set(local_opts, function() {
         chrome.storage.sync.set(sync_opts, function() {
             // Update status to let user know options were saved.
@@ -88,6 +90,8 @@ function restore_options_ui() {
                 populateSelect(mediaInputSelect, bg.chromePhone.getAudioInputs(), local_items.media_input);
                 let mediaOutputSelect = document.getElementById('media_output');
                 populateSelect(mediaOutputSelect, bg.chromePhone.getAudioOutputs(), local_items.media_output);
+                let ringOutputSelect = document.getElementById('ring_output');
+                populateSelect(ringOutputSelect, bg.chromePhone.getAudioOutputs(), local_items.ring_output);
                 document.querySelectorAll('.option.media').forEach(function(e) {e.style.display = '';})
             }
 
@@ -114,6 +118,23 @@ function restore_options_ui() {
         document.getElementById('save').addEventListener('click', save_options_ui);
         document.getElementById('load').addEventListener('click', function () {
             chrome.extension.getBackgroundPage().chromePhone.loadSettingsFromExternalAPI(document);
+        });
+        let playTest = function(elem, ringtone) {
+            if (elem.innerText === 'Test') {
+                chrome.extension.getBackgroundPage().chromePhone.startPlaybackTest(ringtone,
+                    document.getElementById('media_output').value,
+                    document.getElementById('ring_output').value);
+                elem.innerText = 'Stop';
+            } else {
+                chrome.extension.getBackgroundPage().chromePhone.stopPlaybackTest(ringtone);
+                elem.innerText = 'Test';
+            }
+        }
+        document.getElementById('media_output_test').addEventListener('click', function() {
+            playTest(this, false);
+        });
+        document.getElementById('ring_output_test').addEventListener('click', function() {
+            playTest(this, true);
         });
     }
 }

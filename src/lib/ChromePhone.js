@@ -1,6 +1,7 @@
 'use strict';
 
 import Logger from './Logger.js';
+import Tone from './Tone.js';
 import JsSIP from 'jssip';
 
 function ChromePhone() {
@@ -31,12 +32,14 @@ function ChromePhone() {
         audioInputId: undefined,
         audioOutputs: [],
         audioOutputId: undefined,
+        ringOutputId: undefined,
         incoming_pcConfig: undefined,
         incoming_answer: false,
         micAccess: false,
         optionsDoc: undefined
     };
     let tone = new Tone(state.audioContext);
+    let testTone = new Tone(new AudioContext());
 
     function checkMic() {
         // check we have access to the microphone
@@ -85,6 +88,7 @@ function ChromePhone() {
         state.call.on('failed', function(e) {
             logger.debug('failed');
             console.log(e);
+            tone.stopPlayback();
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
@@ -92,6 +96,7 @@ function ChromePhone() {
         });
         state.call.on('ended', function(e) {
             logger.debug('ended');
+            tone.stopPlayback();
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
@@ -104,6 +109,7 @@ function ChromePhone() {
         });
         state.call.on('accepted', function(e) {
             logger.debug('accepted');
+            tone.stopPlayback();
             state.infoMessage = 'On Call: ' + cli;
             state.incoming_answer = false;
             offhook();
@@ -134,7 +140,7 @@ function ChromePhone() {
         updateOverallStatus();
         function startIncomingCallNotification() {
             showNotification('Incoming Call', cli, true);
-            tone.startRinging();
+            tone.startPlayback();
         }
         // get the sidebar to auto answer if the request was from there...
         if (state.externalAPIPort) {
@@ -155,6 +161,17 @@ function ChromePhone() {
             state.audioOutput.srcObject = stream;
             state.audioOutput.play();
             logger.debug('Stream: %o', stream);
+        }
+    }
+
+    function updatePopupViewMessages() {
+        if ('chrome' in window && chrome.extension) {
+            let popup = chrome.extension.getViews({type: 'popup'})[0];
+            if (popup) {
+                popup.updateMessages();
+            }
+        } else if ('updateMessages' in window) {
+            updateMessages();
         }
     }
 
@@ -219,14 +236,14 @@ function ChromePhone() {
     }
 
     function showError(error) {
-        state.infoMessage = undefined;
         if (state.errorTimeout) {
             clearTimeout(state.errorTimeout);
         }
         state.errorMessage = error;
+        updatePopupViewMessages();
         state.errorTimeout = setTimeout(function () {
             state.errorMessage = undefined;
-            updatePopupViewStatus();
+            updatePopupViewMessages();
         }, 5000);
     }
 
@@ -361,33 +378,36 @@ function ChromePhone() {
             updatePopupViewStatus();
             setTimeout(function () {
                 state.infoMessage = undefined;
+                state.errorMessage = undefined;
                 updatePopupViewStatus();
             }, 3000);
         });
         cnf.connection.jssip.on('disconnected', function () {
             logger.debug('disconnected from ' + cnf.sip_server);
-            state.infoMessage = undefined;
-            // not using showError as this must persist
-            state.errorMessage = 'Disconnected from server';
             cnf.connection.status = 'offline';
             cnf.connection.loggedIn = false;
+            state.infoMessage = undefined;
             updateOverallStatus();
+            showError('Disconnected from server');
         });
         cnf.connection.jssip.on('registered', function () {
             logger.debug('registered ' + cnf.sip_user);
             cnf.connection.loggedIn = true;
             cnf.connection.status = 'onhook';
+            state.infoMessage = undefined;
             updateOverallStatus();
         });
         cnf.connection.jssip.on('unregistered', function () {
             logger.debug('unregistered ' + cnf.sip_user);
-            state.errorMessage = 'No longer registered - incoming calls will fail';
+            state.infoMessage = undefined;
             updatePopupViewStatus();
+            showError('No longer registered - incoming calls will fail');
         });
         cnf.connection.jssip.on('registrationFailed', function (e) {
             logger.debug('registrationFailed on ' + cnf.sip_user);
-            showError('Registration Failed: ' + e.cause);
+            state.infoMessage = undefined;
             updatePopupViewStatus();
+            showError('Registration Failed: ' + e.cause);
         });
         cnf.connection.jssip.on('newRTCSession', function (data) {
             // ignore our sessions (outgoing calls)
@@ -396,8 +416,8 @@ function ChromePhone() {
             logger.debug('newRTCSession from ' + cnf.sip_server_host);
             incomingCall(data, cnf.pcConfig);
         });
-        cnf.connection.jssip.on('newMessage', function () {
-            logger.debug('newMessage from ' + cnf.sip_server_host);
+        cnf.connection.jssip.on('newMessage', function (data) {
+            logger.debug('newMessage from ' + cnf.sip_server_host, data);
         });
         // NOTE: skipping registrationExpiring event so JsSIP handles re-register
         logger.debug('jssip created for ' + cnf.sip_server_host);
@@ -523,6 +543,9 @@ function ChromePhone() {
             if (local_opts.media_output) {
                 chromePhone.setAudioOutput(local_opts.media_output);
             }
+            if (local_opts.ring_output) {
+                chromePhone.setRingOutput(local_opts.ring_output);
+            }
         }
 
         let createSipServers = false;
@@ -591,7 +614,7 @@ function ChromePhone() {
             navigator.mediaDevices.enumerateDevices().then(function (devices) {
                 let audioInputs = [];
                 let audioOutputs = [];
-                let audioInput, audioOutput;
+                let audioInput, audioOutput, ringOutput;
                 for (let i = 0; i !== devices.length; ++i) {
                     logger.debug('media device %s: %o', i, devices[i]);
                     if (devices[i].kind === 'audioinput') {
@@ -606,12 +629,14 @@ function ChromePhone() {
                             name: devices[i].deviceId === 'default' ? 'Default' : (devices[i].label || 'speaker ' + (audioOutputs.length + 1))
                         });
                         if (state.audioOutputId === devices[i].deviceId) audioOutput = devices[i].deviceId;
+                        if (state.ringOutputId === devices[i].deviceId) ringOutput = devices[i].deviceId;
                     }
                 }
                 state.audioInputs = audioInputs;
                 state.audioOutputs = audioOutputs;
                 chromePhone.setAudioInput(audioInput);
                 chromePhone.setAudioOutput(audioOutput);
+                chromePhone.setRingOutput(ringOutput);
             });
         }
     }
@@ -650,6 +675,7 @@ function ChromePhone() {
     this.callNumber = function(phoneNumber, external) {
         if (this.isOnCall()) return;
         state.fromExternal = external;
+        state.infoMessage = undefined;
         if (!phoneNumber) {
             logger.warn('No Phone Number');
             showError('No Phone Number');
@@ -690,6 +716,7 @@ function ChromePhone() {
                 if (e.cause === 'SIP Failure Code') {
                     errorMessage += ' - ' + e.message.status_code + ':' + e.message.reason_phrase;
                 }
+                state.infoMessage = undefined;
                 showError(errorMessage);
                 state.call = undefined;
                 onhook();
@@ -733,7 +760,6 @@ function ChromePhone() {
                 chromePhone.hangup(false);
                 checkMicError(e);
             }
-
         };
         state.errorMessage = undefined;
         state.dialedNumber = phoneNumber;
@@ -773,7 +799,6 @@ function ChromePhone() {
         state.incoming_pcConfig = undefined;
         if (state.call) {
             state.call.terminate();
-            state.call.close();
         }
         onhook();
     };
@@ -865,7 +890,10 @@ function ChromePhone() {
     };
 
     this.isOnCall = function() {
-        return state.call;
+        if (state.call) {
+            return true;
+        }
+        return false;
     };
 
     this.getAudioInputs = function() {
@@ -897,7 +925,7 @@ function ChromePhone() {
             for (let i = 0; i < state.audioOutputs.length; i++) {
                 if (deviceId === state.audioOutputs[i].id) {
                     state.audioOutput.setSinkId(deviceId);
-                    tone.setAudioSinkId(deviceId);
+                    tone.audioSinkId = deviceId;
                     logger.debug('set audio output to %s', state.audioOutputId);
                     return;
                 }
@@ -905,7 +933,25 @@ function ChromePhone() {
         }
         logger.debug('default audio output');
         state.audioOutput.setSinkId('default');
-        tone.setAudioSinkId('default');
+        tone.audioSinkId = 'default';
+    };
+
+    this.setRingOutput = function(deviceId) {
+        if (deviceId) {
+            state.ringOutputId = deviceId;
+        }
+        let speakers = 'default';
+        for (let i = 0; i < state.audioOutputs.length; i++) {
+            if (deviceId === state.audioOutputs[i].id) {
+                tone.ringSinkId = deviceId;
+                logger.debug('set ring output to %s', state.ringOutputId);
+                return;
+            } else if (state.audioOutputs[i].name.toLowerCase().contains('built-in')) {
+                speakers = state.audioOutputs[i].id;
+            }
+        }
+        logger.debug('default ring output to built-in %s', speakers);
+        tone.ringSinkId = speakers;
     };
 
     this.hasMicAccess = function() {
@@ -953,153 +999,66 @@ function ChromePhone() {
         }
     };
 
-}
-
-function Tone(context) {
-
-    /**
-     * AudioContext
-     */
-    this.context = context;
-
-    this.destination = this.context.createMediaStreamDestination();
-    this.audioOutput = new Audio();
-    this.audioOutput.srcObject = this.destination.stream;
-
-    this.status = 0;
-    this.ringing = 0;
-
-    let dtmfFrequencies = {
-        '1': {f1: 697, f2: 1209},
-        '2': {f1: 697, f2: 1336},
-        '3': {f1: 697, f2: 1477},
-        '4': {f1: 770, f2: 1209},
-        '5': {f1: 770, f2: 1336},
-        '6': {f1: 770, f2: 1477},
-        '7': {f1: 852, f2: 1209},
-        '8': {f1: 852, f2: 1336},
-        '9': {f1: 852, f2: 1477},
-        '*': {f1: 941, f2: 1209},
-        '0': {f1: 941, f2: 1336},
-        '#': {f1: 941, f2: 1477}
-    };
-
-    this.setAudioSinkId = function(deviceId) {
-        this.audioOutput.setSinkId(deviceId);
-    };
-
-    this.start = function (freq1, freq2) {
-        if (this.status === 1) return;
-        this.audioOutput.play();
-        this.osc1 = this.context.createOscillator();
-        this.osc2 = this.context.createOscillator();
-        this.gainNode = this.context.createGain();
-        this.gainNode.gain.value = 0.25;
-        this.filter = this.context.createBiquadFilter();
-        this.filter.type = 'lowpass';
-        this.filter.frequency.value = 8000;
-        this.osc1.connect(this.gainNode);
-        this.osc2.connect(this.gainNode);
-        this.gainNode.connect(this.filter);
-        this.filter.connect(this.destination);
-        this.osc1.frequency.value = freq1;
-        this.osc2.frequency.value = freq2;
-        this.osc1.start(0);
-        this.osc2.start(0);
-        this.status = 1;
-    };
-
-    this.stop = function () {
-        this.osc1.stop(0);
-        this.osc2.stop(0);
-        this.status = 0;
-        this.audioOutput.pause();
-    };
-
-    this.startDTMF = function (value) {
-        if (this.ringing === 1) return;
-        this.start(dtmfFrequencies[value].f1, dtmfFrequencies[value].f2);
-    };
-
-    this.stopDTMF = function () {
-        if (this.ringing === 1) return;
-        this.stop();
-    };
-
-    this.createRingerLFO = function () {
-        // Create an empty 3 second mono buffer at the
-        // sample rate of the AudioContext
-        let channels = 1;
-        let sampleRate = this.context.sampleRate;
-        let frameCount = sampleRate * 3;
-        let arrayBuffer = this.context.createBuffer(channels, frameCount, sampleRate);
-
-        // getChannelData allows us to access and edit the buffer data and change.
-        let bufferData = arrayBuffer.getChannelData(0);
-        for (let i = 0; i < frameCount; i++) {
-            // if the sample lies between 0 and 0.4 seconds, or 0.6 and 1 second, we want it to be on.
-            if ((i / sampleRate > 0 && i / sampleRate < 0.4) || (i / sampleRate > 0.6 && i / sampleRate < 1.0)) {
-                bufferData[i] = 0.25;
+    this.startPlaybackTest = function(ringtone, audioDeviceId, ringDeviceId) {
+        if (!audioDeviceId) audioDeviceId = 'default';
+        testTone.audioSinkId = audioDeviceId;
+        if (!ringDeviceId) ringDeviceId = 'default';
+        testTone.ringSinkId = ringDeviceId;
+        setTimeout(function() {
+            if (ringtone) {
+                testTone.startPlayback();
+            } else {
+                testTone.startRinging();
             }
-        }
-
-        this.ringerLFOBuffer = arrayBuffer;
+        }, 100);
     };
 
-    this.startRinging = function () {
-        this.start(400, 450);
-        this.ringing = 1;
-        // set our gain node to 0, because the LFO is calibrated to this level
-        this.gainNode.gain.value = 0;
-
-        this.createRingerLFO();
-
-        this.ringerLFOSource = this.context.createBufferSource();
-        this.ringerLFOSource.buffer = this.ringerLFOBuffer;
-        this.ringerLFOSource.loop = true;
-        // connect the ringerLFOSource to the gain Node audio param
-        this.ringerLFOSource.connect(this.gainNode.gain);
-        this.ringerLFOSource.start(0);
-    };
-
-    this.stopRinging = function () {
-        if (this.ringing === 1) {
-            this.ringerLFOSource.stop(0);
-            this.ringerLFOSource.disconnect(0);
-            this.stop();
-            this.ringing = 0;
+    this.stopPlaybackTest = function(ringtone) {
+        if (ringtone) {
+            testTone.stopPlayback();
+        } else {
+            testTone.stopRinging();
         }
     };
 
-    this.boopBoop = function () {
-        let tone = this;
-        // wait for ringing to stop 1st
-        if (this.ringing === 1) {
-            this.stopRinging();
-            setTimeout(function () {
-                tone.boopBoop();
-            }, 50);
-            return;
+    this.transfer = function(number) {
+        if (!this.isOnCall()) return;
+        function transferError(error) {
+            let msg = state.infoMessage;
+            state.infoMessage = undefined;
+            state.errorMessage = error;
+            state.errorTimeout = setTimeout(function () {
+                state.errorMessage = undefined;
+                updatePopupViewStatus();
+            }, 5000);
         }
-        tone.start(400, 400);
-        setTimeout(function () {
-            tone.stop();
-            setTimeout(function () {
-                tone.start(400, 400);
-                setTimeout(function () {
-                    tone.stop();
-                }, 250);
-            }, 200);
-        }, 250);
-    };
+        let eventHandlers = {
+            requestFailed: function(e) {
+                logger.debug('tx req failed: ' + e.cause);
+                showError(e.cause);
+                chromePhone.hold();
+            },
+            accepted: function(e) {
+                logger.debug('tx accepted');
+                chromePhone.hangup(false);
+            },
+            failed: function(e) {
+                logger.debug('tx failed: ' + e.status_line.reason_phrase);
+                showError(e.status_line.reason_phrase);
+                chromePhone.hold();
+            },
+        };
+        state.call.refer(number, {eventHandlers: eventHandlers});
+    }
 
-    this.beep = function () {
-        this.start(1046, 1046);
-        let tone = this;
-        setTimeout(function () {
-            tone.stop();
-        }, 200);
-    };
+    this.debugJsSIP = function(on) {
+        if (on) {
+            JsSIP.debug.enable('JsSIP:*,ChromePhone');
+        } else {
+            JsSIP.debug.disable();
+            JsSIP.debug.enable('ChromePhone');
+        }
+    }
 
 }
 

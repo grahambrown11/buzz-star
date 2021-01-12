@@ -8,9 +8,13 @@ function uiOnDial(e) {
 }
 
 function uiOnHangup() {
+    document.getElementById('hangup').style.display = '';
+    document.getElementById('transfer').style.display = 'none';
     document.getElementById('oncall').style.display = 'none';
     document.getElementById('dial').style.display = '';
     document.getElementById('number').value = '';
+    document.getElementById('tx').dataset.action = 'tx';
+    document.getElementById('tx').title = 'Transfer';
     var top = document.querySelector('.chrome-phone');
     var className = top.className;
     className = className.replace(/w3-border-(red|black)/, 'w3-border-green');
@@ -129,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         keys[i].addEventListener('mouseup', function() {
             chromePhone.stopDTMF();
-            if (chromePhone.isOnCall()) {
+            if (chromePhone.isOnCall() && document.getElementById('tx').dataset.action === 'tx') {
                 chromePhone.sendDTMF(this.dataset.value);
             } else {
                 var e = document.getElementById('number');
@@ -173,12 +177,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('tx').addEventListener('click', function() {
         if (this.dataset.action === 'tx') {
-            this.dataset.action = 'go';
-            this.querySelector('i').className = 'fa fa-long-arrow-right';
+            this.dataset.action = 'cancel';
+            this.title = 'Cancel Transfer';
+            chromePhone.hold();
+            document.getElementById('number').value = '';
+            document.getElementById('hangup').style.display = 'none';
+            document.getElementById('transfer').style.display = '';
         } else {
+            this.title = 'Transfer';
+            chromePhone.hold();
+            document.getElementById('hangup').style.display = '';
+            document.getElementById('transfer').style.display = 'none';
+            document.getElementById('number').value = chromePhone.getPhoneNumber();
             this.dataset.action = 'tx';
-            this.querySelector('i').className = 'fa fa-exchange';
         }
+    });
+
+    document.getElementById('transfer').addEventListener('click', function() {
+        chromePhone.transfer(document.getElementById('number').value);
+        document.getElementById('hangup').style.display = '';
+        document.getElementById('transfer').style.display = 'none';
+        document.getElementById('tx').dataset.action = 'tx';
+        document.getElementById('tx').title = 'Transfer';
     });
 
     document.getElementById('settings').addEventListener('click', function() {

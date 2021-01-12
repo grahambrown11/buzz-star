@@ -1,6 +1,7 @@
 'use strict';
 
 import Logger from './Logger.js';
+import Tone from './Tone.js';
 import JsSIP from 'jssip';
 
 function ChromePhone() {
@@ -31,12 +32,14 @@ function ChromePhone() {
         audioInputId: undefined,
         audioOutputs: [],
         audioOutputId: undefined,
+        ringOutputId: undefined,
         incoming_pcConfig: undefined,
         incoming_answer: false,
         micAccess: false,
         optionsDoc: undefined
     };
     let tone = new Tone(state.audioContext);
+    let testTone = new Tone(new AudioContext());
 
     function checkMic() {
         // check we have access to the microphone
@@ -85,6 +88,7 @@ function ChromePhone() {
         state.call.on('failed', function(e) {
             logger.debug('failed');
             console.log(e);
+            tone.stopPlayback();
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
@@ -92,6 +96,7 @@ function ChromePhone() {
         });
         state.call.on('ended', function(e) {
             logger.debug('ended');
+            tone.stopPlayback();
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
@@ -104,6 +109,7 @@ function ChromePhone() {
         });
         state.call.on('accepted', function(e) {
             logger.debug('accepted');
+            tone.stopPlayback();
             state.infoMessage = 'On Call: ' + cli;
             state.incoming_answer = false;
             offhook();
@@ -134,7 +140,7 @@ function ChromePhone() {
         updateOverallStatus();
         function startIncomingCallNotification() {
             showNotification('Incoming Call', cli, true);
-            tone.startRinging();
+            tone.startPlayback();
         }
         // get the sidebar to auto answer if the request was from there...
         if (state.externalAPIPort) {
@@ -523,6 +529,9 @@ function ChromePhone() {
             if (local_opts.media_output) {
                 chromePhone.setAudioOutput(local_opts.media_output);
             }
+            if (local_opts.ring_output) {
+                chromePhone.setRingOutput(local_opts.ring_output);
+            }
         }
 
         let createSipServers = false;
@@ -591,7 +600,7 @@ function ChromePhone() {
             navigator.mediaDevices.enumerateDevices().then(function (devices) {
                 let audioInputs = [];
                 let audioOutputs = [];
-                let audioInput, audioOutput;
+                let audioInput, audioOutput, ringOutput;
                 for (let i = 0; i !== devices.length; ++i) {
                     logger.debug('media device %s: %o', i, devices[i]);
                     if (devices[i].kind === 'audioinput') {
@@ -606,12 +615,14 @@ function ChromePhone() {
                             name: devices[i].deviceId === 'default' ? 'Default' : (devices[i].label || 'speaker ' + (audioOutputs.length + 1))
                         });
                         if (state.audioOutputId === devices[i].deviceId) audioOutput = devices[i].deviceId;
+                        if (state.ringOutputId === devices[i].deviceId) ringOutput = devices[i].deviceId;
                     }
                 }
                 state.audioInputs = audioInputs;
                 state.audioOutputs = audioOutputs;
                 chromePhone.setAudioInput(audioInput);
                 chromePhone.setAudioOutput(audioOutput);
+                chromePhone.setRingOutput(ringOutput);
             });
         }
     }
@@ -897,7 +908,7 @@ function ChromePhone() {
             for (let i = 0; i < state.audioOutputs.length; i++) {
                 if (deviceId === state.audioOutputs[i].id) {
                     state.audioOutput.setSinkId(deviceId);
-                    tone.setAudioSinkId(deviceId);
+                    tone.audioSinkId = deviceId;
                     logger.debug('set audio output to %s', state.audioOutputId);
                     return;
                 }
@@ -905,7 +916,25 @@ function ChromePhone() {
         }
         logger.debug('default audio output');
         state.audioOutput.setSinkId('default');
-        tone.setAudioSinkId('default');
+        tone.audioSinkId = 'default';
+    };
+
+    this.setRingOutput = function(deviceId) {
+        if (deviceId) {
+            state.ringOutputId = deviceId;
+        }
+        let speakers = 'default';
+        for (let i = 0; i < state.audioOutputs.length; i++) {
+            if (deviceId === state.audioOutputs[i].id) {
+                tone.ringSinkId = deviceId;
+                logger.debug('set ring output to %s', state.ringOutputId);
+                return;
+            } else if (state.audioOutputs[i].name.toLowerCase().contains('built-in')) {
+                speakers = state.audioOutputs[i].id;
+            }
+        }
+        logger.debug('default ring output to built-in %s', speakers);
+        tone.ringSinkId = speakers;
     };
 
     this.hasMicAccess = function() {
@@ -953,152 +982,26 @@ function ChromePhone() {
         }
     };
 
-}
-
-function Tone(context) {
-
-    /**
-     * AudioContext
-     */
-    this.context = context;
-
-    this.destination = this.context.createMediaStreamDestination();
-    this.audioOutput = new Audio();
-    this.audioOutput.srcObject = this.destination.stream;
-
-    this.status = 0;
-    this.ringing = 0;
-
-    let dtmfFrequencies = {
-        '1': {f1: 697, f2: 1209},
-        '2': {f1: 697, f2: 1336},
-        '3': {f1: 697, f2: 1477},
-        '4': {f1: 770, f2: 1209},
-        '5': {f1: 770, f2: 1336},
-        '6': {f1: 770, f2: 1477},
-        '7': {f1: 852, f2: 1209},
-        '8': {f1: 852, f2: 1336},
-        '9': {f1: 852, f2: 1477},
-        '*': {f1: 941, f2: 1209},
-        '0': {f1: 941, f2: 1336},
-        '#': {f1: 941, f2: 1477}
-    };
-
-    this.setAudioSinkId = function(deviceId) {
-        this.audioOutput.setSinkId(deviceId);
-    };
-
-    this.start = function (freq1, freq2) {
-        if (this.status === 1) return;
-        this.audioOutput.play();
-        this.osc1 = this.context.createOscillator();
-        this.osc2 = this.context.createOscillator();
-        this.gainNode = this.context.createGain();
-        this.gainNode.gain.value = 0.25;
-        this.filter = this.context.createBiquadFilter();
-        this.filter.type = 'lowpass';
-        this.filter.frequency.value = 8000;
-        this.osc1.connect(this.gainNode);
-        this.osc2.connect(this.gainNode);
-        this.gainNode.connect(this.filter);
-        this.filter.connect(this.destination);
-        this.osc1.frequency.value = freq1;
-        this.osc2.frequency.value = freq2;
-        this.osc1.start(0);
-        this.osc2.start(0);
-        this.status = 1;
-    };
-
-    this.stop = function () {
-        this.osc1.stop(0);
-        this.osc2.stop(0);
-        this.status = 0;
-        this.audioOutput.pause();
-    };
-
-    this.startDTMF = function (value) {
-        if (this.ringing === 1) return;
-        this.start(dtmfFrequencies[value].f1, dtmfFrequencies[value].f2);
-    };
-
-    this.stopDTMF = function () {
-        if (this.ringing === 1) return;
-        this.stop();
-    };
-
-    this.createRingerLFO = function () {
-        // Create an empty 3 second mono buffer at the
-        // sample rate of the AudioContext
-        let channels = 1;
-        let sampleRate = this.context.sampleRate;
-        let frameCount = sampleRate * 3;
-        let arrayBuffer = this.context.createBuffer(channels, frameCount, sampleRate);
-
-        // getChannelData allows us to access and edit the buffer data and change.
-        let bufferData = arrayBuffer.getChannelData(0);
-        for (let i = 0; i < frameCount; i++) {
-            // if the sample lies between 0 and 0.4 seconds, or 0.6 and 1 second, we want it to be on.
-            if ((i / sampleRate > 0 && i / sampleRate < 0.4) || (i / sampleRate > 0.6 && i / sampleRate < 1.0)) {
-                bufferData[i] = 0.25;
+    this.startPlaybackTest = function(ringtone, audioDeviceId, ringDeviceId) {
+        if (!audioDeviceId) audioDeviceId = 'default';
+        testTone.audioSinkId = audioDeviceId;
+        if (!ringDeviceId) ringDeviceId = 'default';
+        testTone.ringSinkId = ringDeviceId;
+        setTimeout(function() {
+            if (ringtone) {
+                testTone.startPlayback();
+            } else {
+                testTone.startRinging();
             }
+        }, 100);
+    };
+
+    this.stopPlaybackTest = function(ringtone) {
+        if (ringtone) {
+            testTone.stopPlayback();
+        } else {
+            testTone.stopRinging();
         }
-
-        this.ringerLFOBuffer = arrayBuffer;
-    };
-
-    this.startRinging = function () {
-        this.start(400, 450);
-        this.ringing = 1;
-        // set our gain node to 0, because the LFO is calibrated to this level
-        this.gainNode.gain.value = 0;
-
-        this.createRingerLFO();
-
-        this.ringerLFOSource = this.context.createBufferSource();
-        this.ringerLFOSource.buffer = this.ringerLFOBuffer;
-        this.ringerLFOSource.loop = true;
-        // connect the ringerLFOSource to the gain Node audio param
-        this.ringerLFOSource.connect(this.gainNode.gain);
-        this.ringerLFOSource.start(0);
-    };
-
-    this.stopRinging = function () {
-        if (this.ringing === 1) {
-            this.ringerLFOSource.stop(0);
-            this.ringerLFOSource.disconnect(0);
-            this.stop();
-            this.ringing = 0;
-        }
-    };
-
-    this.boopBoop = function () {
-        let tone = this;
-        // wait for ringing to stop 1st
-        if (this.ringing === 1) {
-            this.stopRinging();
-            setTimeout(function () {
-                tone.boopBoop();
-            }, 50);
-            return;
-        }
-        tone.start(400, 400);
-        setTimeout(function () {
-            tone.stop();
-            setTimeout(function () {
-                tone.start(400, 400);
-                setTimeout(function () {
-                    tone.stop();
-                }, 250);
-            }, 200);
-        }, 250);
-    };
-
-    this.beep = function () {
-        this.start(1046, 1046);
-        let tone = this;
-        setTimeout(function () {
-            tone.stop();
-        }, 200);
     };
 
 }

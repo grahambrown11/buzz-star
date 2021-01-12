@@ -164,6 +164,17 @@ function ChromePhone() {
         }
     }
 
+    function updatePopupViewMessages() {
+        if ('chrome' in window && chrome.extension) {
+            let popup = chrome.extension.getViews({type: 'popup'})[0];
+            if (popup) {
+                popup.updateMessages();
+            }
+        } else if ('updateMessages' in window) {
+            updateMessages();
+        }
+    }
+
     function updatePopupViewStatus() {
         if ('chrome' in window && chrome.extension) {
             let popup = chrome.extension.getViews({type: 'popup'})[0];
@@ -225,14 +236,14 @@ function ChromePhone() {
     }
 
     function showError(error) {
-        state.infoMessage = undefined;
         if (state.errorTimeout) {
             clearTimeout(state.errorTimeout);
         }
         state.errorMessage = error;
+        updatePopupViewMessages();
         state.errorTimeout = setTimeout(function () {
             state.errorMessage = undefined;
-            updatePopupViewStatus();
+            updatePopupViewMessages();
         }, 5000);
     }
 
@@ -367,33 +378,36 @@ function ChromePhone() {
             updatePopupViewStatus();
             setTimeout(function () {
                 state.infoMessage = undefined;
+                state.errorMessage = undefined;
                 updatePopupViewStatus();
             }, 3000);
         });
         cnf.connection.jssip.on('disconnected', function () {
             logger.debug('disconnected from ' + cnf.sip_server);
-            state.infoMessage = undefined;
-            // not using showError as this must persist
-            state.errorMessage = 'Disconnected from server';
             cnf.connection.status = 'offline';
             cnf.connection.loggedIn = false;
+            state.infoMessage = undefined;
             updateOverallStatus();
+            showError('Disconnected from server');
         });
         cnf.connection.jssip.on('registered', function () {
             logger.debug('registered ' + cnf.sip_user);
             cnf.connection.loggedIn = true;
             cnf.connection.status = 'onhook';
+            state.infoMessage = undefined;
             updateOverallStatus();
         });
         cnf.connection.jssip.on('unregistered', function () {
             logger.debug('unregistered ' + cnf.sip_user);
-            state.errorMessage = 'No longer registered - incoming calls will fail';
+            state.infoMessage = undefined;
             updatePopupViewStatus();
+            showError('No longer registered - incoming calls will fail');
         });
         cnf.connection.jssip.on('registrationFailed', function (e) {
             logger.debug('registrationFailed on ' + cnf.sip_user);
-            showError('Registration Failed: ' + e.cause);
+            state.infoMessage = undefined;
             updatePopupViewStatus();
+            showError('Registration Failed: ' + e.cause);
         });
         cnf.connection.jssip.on('newRTCSession', function (data) {
             // ignore our sessions (outgoing calls)
@@ -402,8 +416,8 @@ function ChromePhone() {
             logger.debug('newRTCSession from ' + cnf.sip_server_host);
             incomingCall(data, cnf.pcConfig);
         });
-        cnf.connection.jssip.on('newMessage', function () {
-            logger.debug('newMessage from ' + cnf.sip_server_host);
+        cnf.connection.jssip.on('newMessage', function (data) {
+            logger.debug('newMessage from ' + cnf.sip_server_host, data);
         });
         // NOTE: skipping registrationExpiring event so JsSIP handles re-register
         logger.debug('jssip created for ' + cnf.sip_server_host);
@@ -661,6 +675,7 @@ function ChromePhone() {
     this.callNumber = function(phoneNumber, external) {
         if (this.isOnCall()) return;
         state.fromExternal = external;
+        state.infoMessage = undefined;
         if (!phoneNumber) {
             logger.warn('No Phone Number');
             showError('No Phone Number');
@@ -701,6 +716,7 @@ function ChromePhone() {
                 if (e.cause === 'SIP Failure Code') {
                     errorMessage += ' - ' + e.message.status_code + ':' + e.message.reason_phrase;
                 }
+                state.infoMessage = undefined;
                 showError(errorMessage);
                 state.call = undefined;
                 onhook();
@@ -744,7 +760,6 @@ function ChromePhone() {
                 chromePhone.hangup(false);
                 checkMicError(e);
             }
-
         };
         state.errorMessage = undefined;
         state.dialedNumber = phoneNumber;
@@ -784,7 +799,6 @@ function ChromePhone() {
         state.incoming_pcConfig = undefined;
         if (state.call) {
             state.call.terminate();
-            state.call.close();
         }
         onhook();
     };
@@ -876,7 +890,10 @@ function ChromePhone() {
     };
 
     this.isOnCall = function() {
-        return state.call;
+        if (state.call) {
+            return true;
+        }
+        return false;
     };
 
     this.getAudioInputs = function() {
@@ -1003,6 +1020,45 @@ function ChromePhone() {
             testTone.stopRinging();
         }
     };
+
+    this.transfer = function(number) {
+        if (!this.isOnCall()) return;
+        function transferError(error) {
+            let msg = state.infoMessage;
+            state.infoMessage = undefined;
+            state.errorMessage = error;
+            state.errorTimeout = setTimeout(function () {
+                state.errorMessage = undefined;
+                updatePopupViewStatus();
+            }, 5000);
+        }
+        let eventHandlers = {
+            requestFailed: function(e) {
+                logger.debug('tx req failed: ' + e.cause);
+                showError(e.cause);
+                chromePhone.hold();
+            },
+            accepted: function(e) {
+                logger.debug('tx accepted');
+                chromePhone.hangup(false);
+            },
+            failed: function(e) {
+                logger.debug('tx failed: ' + e.status_line.reason_phrase);
+                showError(e.status_line.reason_phrase);
+                chromePhone.hold();
+            },
+        };
+        state.call.refer(number, {eventHandlers: eventHandlers});
+    }
+
+    this.debugJsSIP = function(on) {
+        if (on) {
+            JsSIP.debug.enable('JsSIP:*,ChromePhone');
+        } else {
+            JsSIP.debug.disable();
+            JsSIP.debug.enable('ChromePhone');
+        }
+    }
 
 }
 

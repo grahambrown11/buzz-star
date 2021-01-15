@@ -926,7 +926,7 @@ function ChromePhone() {
                 if (deviceId === state.audioOutputs[i].id) {
                     state.audioOutput.setSinkId(deviceId);
                     tone.audioSinkId = deviceId;
-                    logger.debug('set audio output to %s', state.audioOutputId);
+                    logger.debug('set audio output to %s', deviceId);
                     return;
                 }
             }
@@ -942,15 +942,15 @@ function ChromePhone() {
         }
         let speakers = 'default';
         for (let i = 0; i < state.audioOutputs.length; i++) {
-            if (deviceId === state.audioOutputs[i].id) {
+            if (deviceId !== 'default' && deviceId === state.audioOutputs[i].id) {
                 tone.ringSinkId = deviceId;
-                logger.debug('set ring output to %s', state.ringOutputId);
+                logger.debug('set ring output to %s', deviceId);
                 return;
             } else if (state.audioOutputs[i].name.toLowerCase().indexOf('speaker') >= 0) {
                 speakers = state.audioOutputs[i].id;
             }
         }
-        logger.debug('default ring output to built-in %s', speakers);
+        logger.debug('default ring output to speaker %s', speakers);
         tone.ringSinkId = speakers;
     };
 

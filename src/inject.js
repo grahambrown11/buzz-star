@@ -29,6 +29,10 @@
             console.log('Content script received (port): ', msg);
             window.postMessage({type: 'FROM_EXTENSION', data: msg});
         });
+        port.onDisconnect.addListener(function(msg) {
+            console.log('Content script port disconnected', msg);
+            port = undefined;
+        });
     }
 
     window.addEventListener('message', function (event) {

@@ -946,7 +946,7 @@ function ChromePhone() {
                 tone.ringSinkId = deviceId;
                 logger.debug('set ring output to %s', state.ringOutputId);
                 return;
-            } else if (state.audioOutputs[i].name.toLowerCase().contains('built-in')) {
+            } else if (state.audioOutputs[i].name.toLowerCase().indexOf('speaker') >= 0) {
                 speakers = state.audioOutputs[i].id;
             }
         }

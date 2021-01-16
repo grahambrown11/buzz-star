@@ -24,15 +24,19 @@
     });
 
     function connect() {
-        port = chrome.runtime.connect();
-        port.onMessage.addListener(function(msg) {
-            console.log('Content script received (port): ', msg);
-            window.postMessage({type: 'FROM_EXTENSION', data: msg});
-        });
-        port.onDisconnect.addListener(function(msg) {
-            console.log('Content script port disconnected', msg);
-            port = undefined;
-        });
+        try {
+            port = chrome.runtime.connect();
+            port.onMessage.addListener(function (msg) {
+                console.log('Content script received (port): ', msg);
+                window.postMessage({type: 'FROM_EXTENSION', data: msg});
+            });
+            port.onDisconnect.addListener(function (msg) {
+                console.log('Content script port disconnected', msg);
+                port = undefined;
+            });
+        } catch (err) {
+            window.postMessage({type: 'FROM_EXTENSION', data: {error: 'Cannot connect to Buzz*', cause: err}});
+        }
     }
 
     window.addEventListener('message', function (event) {

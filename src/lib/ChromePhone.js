@@ -6,8 +6,10 @@ import JsSIP from 'jssip';
 
 function ChromePhone() {
 
+    this.version = "$$version$$";
+
     let logger = new Logger();
-    logger.debug('ChromePhone created');
+    logger.debug('ChromePhone created, ver:' + this.version);
 
     let state = {
         previouslyLoggedIn: false,
@@ -22,7 +24,7 @@ function ChromePhone() {
         hold: false,
         hijackLinks: false,
         externalAPIURL: undefined,
-        externalAPIPort: undefined,
+        externalAPIPort: [],
         errorMessage: undefined,
         errorTimeout: undefined,
         infoMessage: undefined,
@@ -67,13 +69,22 @@ function ChromePhone() {
     function incomingCall(data, pcConfig) {
         logger.debug('incoming call');
         // Avoid if busy or other incoming
-        if (chromePhone.getStatus() === 'offhook') {
+        if (window.chromePhone.getStatus() === 'offhook') {
             logger.debug('status offhook: replied with 486 "Busy Here"');
             data.session.terminate({
                 status_code   : 486,
                 reason_phrase : 'Busy Here'
             });
             return;
+        }
+
+        function getAndSetRemoteStream() {
+            let remoteStream = state.call.connection.getRemoteStreams();
+            if (remoteStream.length > 0) {
+                setOutputStream(remoteStream[0]);
+            } else {
+                logger.debug('no remote streams yet...');
+            }
         }
 
         // register session events
@@ -85,6 +96,13 @@ function ChromePhone() {
         else if (state.call.remote_identity && state.call.remote_identity.uri && state.call.remote_identity.uri.user)
             cli = state.call.remote_identity.uri.user;
 
+        state.call.on('peerconnection', function(e) {
+            logger.debug('peerconnection: %o', e.peerconnection);
+            e.peerconnection.addEventListener('addstream', function(event) {
+                logger.debug('peerconnection addstream');
+                setOutputStream(event.stream);
+            });
+        });
         state.call.on('failed', function(e) {
             logger.debug('failed');
             console.log(e);
@@ -102,10 +120,15 @@ function ChromePhone() {
             state.call = undefined;
             onhook();
         });
+        state.call.on('sdp', function(e) {
+            logger.debug('sdp %o', e);
+            // ignore when on hold
+            if (!state.hold && e.type === 'answer') {
+                // getAndSetRemoteStream();
+            }
+        });
         state.call.on('connecting', function(e) {
             logger.debug('connecting');
-            let remoteStream = this.connection.getRemoteStreams()[0];
-            setOutputStream(remoteStream);
         });
         state.call.on('accepted', function(e) {
             logger.debug('accepted');
@@ -134,6 +157,9 @@ function ChromePhone() {
             state.mute = false;
             updatePopupMute();
         });
+        state.call.on('reinvite', function(e) {
+            logger.debug('reinvite: %o', e);
+        });
         state.incoming_pcConfig = pcConfig;
         state.infoMessage = 'Ringing: ' + cli;
         state.incoming_answer = true;
@@ -143,10 +169,16 @@ function ChromePhone() {
             tone.startPlayback();
         }
         // get the sidebar to auto answer if the request was from there...
-        if (state.externalAPIPort) {
-            state.externalAPIPort.postMessage({action: 'incoming-call', cli: cli});
-            setTimeout(function() {
-                if (!state.call.isEnded() && !state.call.isEstablished()) {
+        if (state.externalAPIPort.length > 0) {
+            for (let p = 0; p < state.externalAPIPort.length; p++) {
+                try {
+                    state.externalAPIPort[p].postMessage({action: 'incoming-call', cli: cli});
+                } catch(err) {
+                    logger.warn("Error posting to external API: %o", err);
+                }
+            }
+            setTimeout(function () {
+                if (state.call && !state.call.isEnded() && !state.call.isEstablished()) {
                     startIncomingCallNotification();
                 }
             }, 100);
@@ -157,10 +189,13 @@ function ChromePhone() {
 
     function setOutputStream(stream) {
         if (stream) {
-            logger.debug('setOutputStream()');
+            logger.debug('setOutputStream(%o)', stream);
+            if (!state.audioOutput.paused) {
+                logger.debug('audio already playing, pausing 1st');
+                state.audioOutput.pause();
+            }
             state.audioOutput.srcObject = stream;
             state.audioOutput.play();
-            logger.debug('Stream: %o', stream);
         }
     }
 
@@ -230,8 +265,10 @@ function ChromePhone() {
     }
 
     function notifyExternal(msg) {
-        if (state.fromExternal && state.externalAPIPort) {
-            state.externalAPIPort.postMessage(msg);
+        if (state.fromExternal && state.externalAPIPort.length > 0) {
+            for (let p = 0; p < state.externalAPIPort.length; p++) {
+                state.externalAPIPort[p].postMessage(msg);
+            }
         }
     }
 
@@ -290,7 +327,7 @@ function ChromePhone() {
     }
 
     function updateOverallStatus() {
-        let status = chromePhone.getStatus();
+        let status = window.chromePhone.getStatus();
         let icon = getIcons('blue');
         if (status === 'offhook' || status === 'ringing') {
             icon = getIcons('red');
@@ -361,7 +398,8 @@ function ChromePhone() {
             password: cnf.sip_password,
             register: true,
             registrar_server: 'sip:' + cnf.sip_server_host,
-            session_timers: true
+            session_timers: true,
+            user_agent: 'Buzz* ' + window.chromePhone.version
         };
         logger.debug('JsSIP config: %o', configuration);
         cnf.connection.jssip = new JsSIP.UA(configuration);
@@ -464,7 +502,7 @@ function ChromePhone() {
                             tel_links: state.hijackLinks
                         });
                     } else if (request.action === 'call') {
-                        chromePhone.setPhoneNumber(request.phoneNumber);
+                        window.chromePhone.setPhoneNumber(request.phoneNumber);
                     } else {
                         logger.debug('unknown action runtime onMessage, request: %o, sender: %o', request, sender);
                     }
@@ -477,30 +515,31 @@ function ChromePhone() {
                 logger.debug('onConnect, port: %o', port);
                 if (typeof port.sender !== 'undefined' && checkExternalAPIURL(port.sender.url)) {
                     logger.debug('External API connection allowed');
-                    state.externalAPIPort = port; // for now the last sidebar connect wins...
+                    state.externalAPIPort.push(port);
                     port.onMessage.addListener(function (msg) {
                         logger.debug('onMessage (Content Script): %o', msg);
                         if (msg === 'ping') {
-                            state.externalAPIPort.postMessage('pong');
+                            port.postMessage('pong');
                         } else if (typeof msg.action !== 'undefined') {
                             if (msg.action === 'ping') {
                                 logger.debug('sending pong');
-                                state.externalAPIPort.postMessage({action: 'pong'});
+                                port.postMessage({action: 'pong'});
                             } else if (msg.action === 'call') {
-                                chromePhone.callNumber(msg.phoneNumber, true);
+                                window.chromePhone.callNumber(msg.phoneNumber, true);
                             } else if (msg.action === 'answer' && state.call) {
-                                chromePhone.answer();
+                                window.chromePhone.answer();
                             } else if (msg.action === 'login') {
-                                chromePhone.login(true);
+                                window.chromePhone.login(true);
                             } else if (msg.action === 'set-settings') {
-                                chromePhone.updateSettingsScreen(msg.settings);
+                                window.chromePhone.updateSettingsScreen(msg.settings);
                             }
                         }
                     });
                     port.onDisconnect.addListener(function (disconnectedPort) {
-                        logger.debug('Runtime connection disconnected');
-                        if (disconnectedPort === state.externalAPIPort) {
-                            state.externalAPIPort = undefined;
+                        logger.debug('Runtime connection disconnected: %o', disconnectedPort);
+                        let pos = state.externalAPIPort.indexOf(disconnectedPort);
+                        if (pos >= 0) {
+                            state.externalAPIPort.slice(pos, 1);
                         }
                     });
                 }
@@ -510,9 +549,9 @@ function ChromePhone() {
                 console.log('notification ' + id + ' button ' + button + ' clicked');
                 clearNotification();
                 if (button === 0) {
-                    chromePhone.answer();
+                    window.chromePhone.answer();
                 } else {
-                    chromePhone.hangup(false);
+                    window.chromePhone.hangup(false);
                 }
             });
 
@@ -521,7 +560,8 @@ function ChromePhone() {
             });
         }
 
-        chromePhone.updateOptions(sync_opts, local_opts);
+        window.chromePhone.updateOptions(sync_opts, local_opts);
+        state.audioOutput.pause();
 
     };
 
@@ -538,13 +578,13 @@ function ChromePhone() {
 
         if (local_opts) {
             if (local_opts.media_input) {
-                chromePhone.setAudioInput(local_opts.media_input);
+                window.chromePhone.setAudioInput(local_opts.media_input);
             }
             if (local_opts.media_output) {
-                chromePhone.setAudioOutput(local_opts.media_output);
+                window.chromePhone.setAudioOutput(local_opts.media_output);
             }
             if (local_opts.ring_output) {
-                chromePhone.setRingOutput(local_opts.ring_output);
+                window.chromePhone.setRingOutput(local_opts.ring_output);
             }
         }
 
@@ -574,7 +614,7 @@ function ChromePhone() {
             if (createSipServers) {
                 logger.debug('servers changing, shutdown 1st');
                 timeout = 2000;
-                chromePhone.shutdown();
+                window.chromePhone.shutdown();
             }
         } else {
             createSipServers = true;
@@ -602,7 +642,7 @@ function ChromePhone() {
                 }
                 logger.debug('auto_login: %s', sync_opts.auto_login);
                 if (sync_opts.auto_login) {
-                    chromePhone.login(false);
+                    window.chromePhone.login(false);
                 }
             }, timeout);
         }
@@ -634,9 +674,9 @@ function ChromePhone() {
                 }
                 state.audioInputs = audioInputs;
                 state.audioOutputs = audioOutputs;
-                chromePhone.setAudioInput(audioInput);
-                chromePhone.setAudioOutput(audioOutput);
-                chromePhone.setRingOutput(ringOutput);
+                window.chromePhone.setAudioInput(audioInput);
+                window.chromePhone.setAudioOutput(audioOutput);
+                window.chromePhone.setRingOutput(ringOutput);
             });
         }
     }
@@ -697,24 +737,27 @@ function ChromePhone() {
         }
         // call events
         let eventHandlers = {
-            connecting: function() {
-                logger.debug('call connecting');
-                state.call.connection.addEventListener('addstream', function(event) {
-                    logger.debug('connection addstream');
+            peerconnection: function(data) {
+                logger.debug('call peer connection %o', data.peerconnection);
+                data.peerconnection.addEventListener('addstream', function(event) {
+                    logger.debug('call addstream');
                     setOutputStream(event.stream);
                 });
             },
-            progress: function() {
+            connecting: function(data) {
+                logger.debug('call connecting');
+            },
+            progress: function(data) {
                 logger.debug('call progress');
                 tone.startRinging();
             },
-            failed: function(e) {
-                logger.debug('call failed: %o', e);
+            failed: function(data) {
+                logger.debug('call failed: %o', data);
                 tone.stopRinging();
                 tone.boopBoop();
-                let errorMessage = 'Call Failed: ' + e.cause;
-                if (e.cause === 'SIP Failure Code') {
-                    errorMessage += ' - ' + e.message.status_code + ':' + e.message.reason_phrase;
+                let errorMessage = 'Call Failed: ' + data.cause;
+                if (data.cause === 'SIP Failure Code') {
+                    errorMessage += ' - ' + data.message.status_code + ':' + data.message.reason_phrase;
                 }
                 state.infoMessage = undefined;
                 showError(errorMessage);
@@ -722,43 +765,43 @@ function ChromePhone() {
                 onhook();
                 notifyExternalOfError();
             },
-            ended: function() {
+            ended: function(data) {
                 logger.debug('call ended');
                 tone.boopBoop();
                 state.call = undefined;
                 onhook();
             },
-            confirmed: function() {
+            confirmed: function(data) {
                 logger.debug('call confirmed');
                 tone.stopRinging();
                 tone.beep();
                 state.infoMessage = 'On Call to ' + state.dialedNumber;
                 updatePopupMessages();
             },
-            hold: function() {
+            hold: function(data) {
                 logger.debug('hold');
                 state.hold = true;
                 updatePopupHold();
             },
-            unhold: function(e) {
+            unhold: function(data) {
                 logger.debug('unhold');
                 state.hold = false;
                 updatePopupHold();
             },
-            muted: function(e) {
+            muted: function(data) {
                 logger.debug('muted');
                 state.mute = true;
                 updatePopupMute();
             },
-            unmuted: function(e) {
+            unmuted: function(data) {
                 logger.debug('unmuted');
                 state.mute = false;
                 updatePopupMute();
             },
-            getusermediafailed: function(e) {
-                logger.debug('getusermediafailed: %o', e);
-                chromePhone.hangup(false);
-                checkMicError(e);
+            getusermediafailed: function(data) {
+                logger.debug('getusermediafailed: %o', data);
+                window.chromePhone.hangup(false);
+                checkMicError(data);
             }
         };
         state.errorMessage = undefined;
@@ -766,27 +809,41 @@ function ChromePhone() {
         state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
         let callUri = 'sip:' + state.dialedNumber + '@' + srv.sip_server_host;
         logger.debug('caling: %s', callUri);
-        state.call = srv.connection.jssip.call(callUri, {
-            eventHandlers: eventHandlers,
+        state.call = srv.connection.jssip.call(callUri, getConnectionOptions(srv.pcConfig ,eventHandlers));
+        offhook();
+    };
+
+    function getConnectionOptions(pcConfig, eventHandlers) {
+        let opts = {
             mediaConstraints: {
-                audio: {deviceId: state.audioInput ? {exact: state.audioInput} : undefined},
+                audio: true,
                 video: false
             },
             rtcOfferConstraints: {
                 offerToReceiveAudio : 1,
                 offerToReceiveVideo : 0
             },
-            pcConfig: srv.pcConfig
-        });
-        offhook();
-    };
+            rtcAnswerConstraints: {
+                offerToReceiveAudio : 1,
+                offerToReceiveVideo : 0
+            },
+            pcConfig: pcConfig
+        };
+        if (state.audioInput) {
+            // although the JsSIP definition is boolean it hads it to the browser getUserMedia which
+            // has Boolean or MediaTrackConstraints https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamConstraints
+            opts.mediaConstraints.audio = {deviceId: {exact: state.audioInput}};
+        }
+        if (eventHandlers) {
+            opts.eventHandlers = eventHandlers;
+        }
+        return opts;
+    }
 
     this.answer = function() {
         if (state.call) {
-            state.call.answer({
-                pcConfig: state.incoming_pcConfig
-            });
-            tone.stopRinging();
+            tone.stopPlayback();
+            state.call.answer(getConnectionOptions(state.incoming_pcConfig));
             offhook();
         }
         state.incoming_answer = false;
@@ -959,15 +1016,16 @@ function ChromePhone() {
     }
 
     this.connectedToExternalAPI = function() {
-        logger.debug('externalAPIPort type: ' + (typeof state.externalAPIPort));
-        return typeof state.externalAPIPort !== 'undefined';
+        logger.debug('externalAPIPort length: %i', state.externalAPIPort.length);
+        return state.externalAPIPort.length > 0;
     };
 
     this.loadSettingsFromExternalAPI = function(optionsDoc) {
-        if (state.externalAPIPort) {
+        if (this.connectedToExternalAPI()) {
             logger.debug('Request settings from CRM');
             state.optionsDoc = optionsDoc;
-            state.externalAPIPort.postMessage({action: 'get-settings'});
+            // just get the settings from the 1st connection
+            state.externalAPIPort[0].postMessage({action: 'get-settings'});
         } else {
             logger.warn('No Sidebar Port, cannot request settings');
         }
@@ -1036,16 +1094,16 @@ function ChromePhone() {
             requestFailed: function(e) {
                 logger.debug('tx req failed: ' + e.cause);
                 showError(e.cause);
-                chromePhone.hold();
+                window.chromePhone.hold();
             },
             accepted: function(e) {
                 logger.debug('tx accepted');
-                chromePhone.hangup(false);
+                window.chromePhone.hangup(false);
             },
             failed: function(e) {
                 logger.debug('tx failed: ' + e.status_line.reason_phrase);
                 showError(e.status_line.reason_phrase);
-                chromePhone.hold();
+                window.chromePhone.hold();
             },
         };
         state.call.refer(number, {eventHandlers: eventHandlers});

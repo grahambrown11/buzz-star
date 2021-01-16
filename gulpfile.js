@@ -46,6 +46,7 @@ gulp.task('bundle', gulp.series('manifest', () => {
         log(e);
     })
     .pipe(source('chrome-phone.js'))
+    .pipe(replace('$$version$$', pkg.version))
     .pipe(gulp.dest(OUTPUT_DIR));
 }));
 

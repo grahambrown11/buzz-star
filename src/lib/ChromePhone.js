@@ -78,15 +78,6 @@ function ChromePhone() {
             return;
         }
 
-        function getAndSetRemoteStream() {
-            let remoteStream = state.call.connection.getRemoteStreams();
-            if (remoteStream.length > 0) {
-                setOutputStream(remoteStream[0]);
-            } else {
-                logger.debug('no remote streams yet...');
-            }
-        }
-
         // register session events
         state.call = data.session;
         let cli = 'Unknown';
@@ -122,10 +113,6 @@ function ChromePhone() {
         });
         state.call.on('sdp', function(e) {
             logger.debug('sdp %o', e);
-            // ignore when on hold
-            if (!state.hold && e.type === 'answer') {
-                // getAndSetRemoteStream();
-            }
         });
         state.call.on('connecting', function(e) {
             logger.debug('connecting');

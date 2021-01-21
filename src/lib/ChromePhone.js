@@ -78,15 +78,6 @@ function ChromePhone() {
             return;
         }
 
-        function getAndSetRemoteStream() {
-            let remoteStream = state.call.connection.getRemoteStreams();
-            if (remoteStream.length > 0) {
-                setOutputStream(remoteStream[0]);
-            } else {
-                logger.debug('no remote streams yet...');
-            }
-        }
-
         // register session events
         state.call = data.session;
         let cli = 'Unknown';
@@ -122,10 +113,6 @@ function ChromePhone() {
         });
         state.call.on('sdp', function(e) {
             logger.debug('sdp %o', e);
-            // ignore when on hold
-            if (!state.hold && e.type === 'answer') {
-                // getAndSetRemoteStream();
-            }
         });
         state.call.on('connecting', function(e) {
             logger.debug('connecting');
@@ -359,6 +346,36 @@ function ChromePhone() {
         return server;
     }
 
+    this.getUserAgent = function() {
+        if (!this._theUserAgent) {
+            let agent = 'Buzz* ' + this.version + ' on ';
+            logger.debug('Browser User Agent: %s', navigator.userAgent);
+            if (/Windows/i.test(navigator.userAgent)) {
+                agent += 'Windows';
+            } else if (/Mac/i.test(navigator.userAgent)) {
+                agent += 'Mac';
+            } else if (/CrOS/i.test(navigator.userAgent)) {
+                agent += 'ChromeOS';
+            } else if (/Linux/i.test(navigator.userAgent)) {
+                agent += 'Linux';
+            } else {
+                agent += 'Unknown OS';
+            }
+            agent += ' - ';
+            if (/Edg/.test(navigator.userAgent)) {
+                const browser = navigator.userAgent.match(/(Edg)\/(([0-9]+\.?)+)/);
+                agent += browser[1] + '/' + browser[2];
+            } else if (/Chrom(?:e|ium)/.test(navigator.userAgent)) {
+                const browser = navigator.userAgent.match(/(Chrom(?:e|ium))\/(([0-9]+\.?)+)/);
+                agent += browser[1] + '/' + browser[2];
+            } else {
+                agent += 'Unknown Browser';
+            }
+            this._theUserAgent = agent;
+        }
+        return this._theUserAgent;
+    }
+
     function createSipServer(options) {
         let server = serverFromOptions(options);
         if (server.length === 0 || typeof options.extension === 'undefined' || options.extension.trim().length === 0) {
@@ -399,7 +416,7 @@ function ChromePhone() {
             register: true,
             registrar_server: 'sip:' + cnf.sip_server_host,
             session_timers: true,
-            user_agent: 'Buzz* ' + window.chromePhone.version
+            user_agent: window.chromePhone.getUserAgent()
         };
         logger.debug('JsSIP config: %o', configuration);
         cnf.connection.jssip = new JsSIP.UA(configuration);
@@ -478,7 +495,8 @@ function ChromePhone() {
 
     this.init = function (sync_opts, local_opts) {
         logger.debug('init');
-        if ('chrome' in window && chrome.extension) {
+        logger.debug(this.getUserAgent());
+        if ('chrome' in window && window.chrome.extension) {
             logger.debug('Is a chrome extension');
             chrome.browserAction.setIcon({path: getIcons('blue')});
 
@@ -500,6 +518,11 @@ function ChromePhone() {
                         sendResponse({
                             api_allowed: api_allowed,
                             tel_links: state.hijackLinks
+                        });
+                    } else if (request.action === 'ping') {
+                        sendResponse({
+                            action: 'pong',
+                            version: window.chromePhone.version
                         });
                     } else if (request.action === 'call') {
                         window.chromePhone.setPhoneNumber(request.phoneNumber);
@@ -523,7 +546,7 @@ function ChromePhone() {
                         } else if (typeof msg.action !== 'undefined') {
                             if (msg.action === 'ping') {
                                 logger.debug('sending pong');
-                                port.postMessage({action: 'pong'});
+                                port.postMessage({action: 'pong', version: window.chromePhone.version});
                             } else if (msg.action === 'call') {
                                 window.chromePhone.callNumber(msg.phoneNumber, true);
                             } else if (msg.action === 'answer' && state.call) {

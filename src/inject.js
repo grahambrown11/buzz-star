@@ -2,14 +2,14 @@
 
 (function () {
 
-    let auto = false;
+    let api_allowed = false;
     let tel_links = false;
     let port = undefined;
 
     chrome.runtime.sendMessage({action: 'inject'}, function(response) {
         if (response.api_allowed) {
             console.log('Allow External BuzzAPI');
-            auto = true;
+            api_allowed = true;
             if (!window.buzzApi) {
                 var s = document.createElement('script');
                 s.type = 'text/javascript';
@@ -28,14 +28,17 @@
             port = chrome.runtime.connect();
             port.onMessage.addListener(function (msg) {
                 console.log('Content script received (port): ', msg);
-                window.postMessage({type: 'FROM_EXTENSION', data: msg});
+                window.postMessage({type: 'FROM_EXTENSION', data: msg}, '*');
             });
             port.onDisconnect.addListener(function (msg) {
                 console.log('Content script port disconnected', msg);
                 port = undefined;
             });
         } catch (err) {
-            window.postMessage({type: 'FROM_EXTENSION', data: {error: 'Cannot connect to Buzz*', cause: err}});
+            console.error('Cannot connect to Buzz* - ' + err);
+            window.postMessage({type: 'FROM_EXTENSION', data: {
+                error: 'Cannot connect to Buzz*, try refresh', cause: err}}, '*');
+            port = undefined;
         }
     }
 
@@ -44,14 +47,17 @@
         console.log('Content script received (window): ', event);
         if (event.data.type && event.data.type === 'FROM_PAGE') {
             console.log('from page...');
-            if (auto && !port) {
+            if (api_allowed && !port) {
                 connect();
             }
-            if (event.data.data && event.data.data.action) {
-                if (port) {
+            if (port && event.data.data && event.data.data.action) {
+                try {
                     port.postMessage(event.data.data);
-                } else {
-                    chrome.runtime.sendMessage(event.data.data);
+                } catch (err) {
+                    console.error('Cannot connect to Buzz* - ' + err);
+                    window.postMessage({type: 'FROM_EXTENSION', data: {
+                        error: 'Cannot connect to Buzz*, try refresh', cause: err}}, '*');
+                    port = undefined;
                 }
             }
         }

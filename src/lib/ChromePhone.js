@@ -908,7 +908,7 @@ function ChromePhone() {
     };
 
     this.setPhoneNumber = function(number) {
-        state.phoneNumber = number.replace(/\D|\*|#/g,'');
+        state.phoneNumber = number.replace(/[^\d\*\#]/g,'');
         return state.phoneNumber;
     };
 

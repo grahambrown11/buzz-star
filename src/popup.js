@@ -137,8 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 chromePhone.sendDTMF(this.dataset.value);
             } else {
                 var e = document.getElementById('number');
-                e.value += this.dataset.value;
-                chromePhone.setPhoneNumber(e.value);
+                e.value = chromePhone.setPhoneNumber(e.value + this.dataset.value);
             }
         });
     }

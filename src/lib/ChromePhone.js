@@ -38,7 +38,10 @@ function ChromePhone() {
         incoming_pcConfig: undefined,
         incoming_answer: false,
         micAccess: false,
-        optionsDoc: undefined
+        optionsDoc: undefined,
+        autoAnswer: false,
+        broadcast: new BroadcastChannel('buzz_bus'),
+        popoutWindowId: undefined
     };
     let tone = new Tone(state.audioContext);
     let testTone = new Tone(new AudioContext());
@@ -120,6 +123,7 @@ function ChromePhone() {
         state.call.on('accepted', function(e) {
             logger.debug('accepted');
             tone.stopPlayback();
+            tone.beep();
             state.infoMessage = 'On Call: ' + cli;
             state.incoming_answer = false;
             offhook();
@@ -154,6 +158,38 @@ function ChromePhone() {
         function startIncomingCallNotification() {
             showNotification('Incoming Call', cli, true);
             tone.startPlayback();
+            if (state.autoAnswer) {
+                function autoAnswerCall() {
+                    setTimeout(function() {
+                        if (state.call && !state.call.isEnded() && state.incoming_answer) {
+                            logger.debug('Auto Answering...');
+                            window.chromePhone.answer();
+                        } else {
+                            logger.debug('Already Answered, ignoring');
+                        }
+                    }, 2000);
+                }
+                if ('chrome' in window) {
+                    chrome.permissions.contains({permissions: ['idle']}, function(hasIdleAccess) {
+                        if (hasIdleAccess) {
+                            logger.debug('Has Idle Permission, checking state...');
+                            chrome.idle.queryState((15 * 60), function (idleState) {
+                                logger.debug('IdleState: %o', idleState);
+                                if (idleState === 'active') {
+                                    logger.debug('Not Idle, Auto Answer in 2 sec');
+                                    autoAnswerCall();
+                                }
+                            });
+                        } else {
+                            logger.warn('No Idle Permission');
+                            autoAnswerCall();
+                        }
+                    });
+
+                } else {
+                    autoAnswerCall();
+                }
+            }
         }
         // get the sidebar to auto answer if the request was from there...
         if (state.externalAPIPort.length > 0) {
@@ -187,24 +223,18 @@ function ChromePhone() {
     }
 
     function updatePopupViewMessages() {
-        if ('chrome' in window && chrome.extension) {
-            let popup = chrome.extension.getViews({type: 'popup'})[0];
-            if (popup) {
-                popup.updateMessages();
-            }
-        } else if ('updateMessages' in window) {
-            updateMessages();
+        if (state.broadcast) {
+            state.broadcast.postMessage({action: 'updateMessages'});
+        } else if ('uiUpdateMessages' in window) {
+            uiUpdateMessages();
         }
     }
 
     function updatePopupViewStatus() {
-        if ('chrome' in window && chrome.extension) {
-            let popup = chrome.extension.getViews({type: 'popup'})[0];
-            if (popup) {
-                popup.updateFromBackground();
-            }
-        } else if ('updateFromBackground' in window) {
-            updateFromBackground();
+        if (state.broadcast) {
+            state.broadcast.postMessage({action: 'updateStatus'});
+        } else if ('uiUpdateStatus' in window) {
+            uiUpdateStatus();
         }
     }
 
@@ -272,35 +302,18 @@ function ChromePhone() {
     }
 
     function updatePopupMute() {
-        if ('chrome' in window && chrome.extension) {
-            let popup = chrome.extension.getViews({type: 'popup'})[0];
-            if (popup) {
-                popup.updateMute();
-            }
-        } else if ('updateMute' in window) {
-            updateMute();
+        if (state.broadcast) {
+            state.broadcast.postMessage({action: 'updateMute'});
+        } else if ('uiUpdateMute' in window) {
+            uiUpdateMute();
         }
     }
 
     function updatePopupHold() {
-        if ('chrome' in window && chrome.extension) {
-            let popup = chrome.extension.getViews({type: 'popup'})[0];
-            if (popup) {
-                popup.updateHold();
-            }
-        } else if ('updateHold' in window) {
-            updateHold();
-        }
-    }
-
-    function updatePopupMessages() {
-        if ('chrome' in window && chrome.extension) {
-            let popup = chrome.extension.getViews({type: 'popup'})[0];
-            if (popup) {
-                popup.updateMessages();
-            }
-        } else if ('updateMessages' in window) {
-            updateMessages();
+        if (state.broadcast) {
+            state.broadcast.postMessage({action: 'updateHold'});
+        } else if ('uiUpdateHold' in window) {
+            uiUpdateHold();
         }
     }
 
@@ -526,6 +539,9 @@ function ChromePhone() {
                         });
                     } else if (request.action === 'call') {
                         window.chromePhone.setPhoneNumber(request.phoneNumber);
+                        if (state.broadcast) {
+                            state.broadcast.postMessage({action: 'setPhoneNumber'});
+                        }
                     } else {
                         logger.debug('unknown action runtime onMessage, request: %o, sender: %o', request, sender);
                     }
@@ -569,7 +585,7 @@ function ChromePhone() {
             });
 
             chrome.notifications.onButtonClicked.addListener(function (id, button) {
-                console.log('notification ' + id + ' button ' + button + ' clicked');
+                logger.debug('notification ' + id + ' button ' + button + ' clicked');
                 clearNotification();
                 if (button === 0) {
                     window.chromePhone.answer();
@@ -581,11 +597,21 @@ function ChromePhone() {
             chrome.notifications.onClosed.addListener(function () {
                 state.notificationId = undefined;
             });
+
+            chrome.windows.onRemoved.addListener(function(windowId) {
+                logger.debug('window closed %d', windowId);
+                if (state.popoutWindowId === windowId) {
+                    state.popoutWindowId = undefined;
+                }
+            });
+
+            if (sync_opts.start_popout && !state.popoutWindowId) {
+                window.chromePhone.popoutWindow();
+            }
         }
 
         window.chromePhone.updateOptions(sync_opts, local_opts);
         state.audioOutput.pause();
-
     };
 
     this.updateOptions = function (sync_opts, local_opts) {
@@ -594,6 +620,7 @@ function ChromePhone() {
         state.errorMessage = undefined;
 
         state.hijackLinks = sync_opts.hijack_links;
+        state.autoAnswer = sync_opts.auto_answer;
         state.externalAPIURL = undefined;
         if (sync_opts.external_api) {
             state.externalAPIURL = sync_opts.external_api;
@@ -742,6 +769,9 @@ function ChromePhone() {
         if (!phoneNumber) {
             logger.warn('No Phone Number');
             showError('No Phone Number');
+            if (external) {
+                notifyExternal({action: 'error', error: 'No Phone Number'});
+            }
             return;
         }
         if (state.servers.length === 0) {
@@ -799,7 +829,7 @@ function ChromePhone() {
                 tone.stopRinging();
                 tone.beep();
                 state.infoMessage = 'On Call to ' + state.dialedNumber;
-                updatePopupMessages();
+                updatePopupViewMessages();
             },
             hold: function(data) {
                 logger.debug('hold');
@@ -1138,6 +1168,38 @@ function ChromePhone() {
         } else {
             JsSIP.debug.disable();
             JsSIP.debug.enable('ChromePhone');
+        }
+    }
+
+    this.popoutWindow = function() {
+        if ('chrome' in window) {
+            let info = {
+                focused: true,
+                width: 220,
+                height: 550,
+                top: 0,
+                left: 0
+            };
+            if (window.screen) {
+                if (window.screen.availWidth > 200) {
+                    info.left = Math.round((window.screen.availWidth / 2) - 100);
+                }
+                if (window.screen.availHeight > 510) {
+                    info.top = Math.round((window.screen.availHeight / 2) - 255);
+                }
+            }
+            if (typeof state.popoutWindowId === 'undefined') {
+                info.url = chrome.extension.getURL('popup.html') + '?type=popout';
+                info.type = 'popup';
+                chrome.windows.create(info, function(win) {
+                    if (win) {
+                        logger.debug('popout created %d', win.id);
+                        state.popoutWindowId = win.id;
+                    }
+                });
+            } else {
+                chrome.windows.update(state.popoutWindowId, info);
+            }
         }
     }
 

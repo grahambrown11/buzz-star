@@ -9,8 +9,12 @@
     "background",
     "notifications"
   ],
+  "optional_permissions": [
+    "idle"
+  ],
   "background": {
-    "scripts": ["options.js", "chrome-phone.js"]
+    "scripts": ["options.js", "chrome-phone.js"],
+    "persistent": true
   },
   "icons": {
     "16": "img/icon-blue-16.png",
@@ -26,7 +30,7 @@
       "128": "img/icon-blue-128.png"
     },
     "default_title": "Buzz* - Phone for Google Chrome™",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html?type=popup"
   },
   "options_ui": {
     "page": "options.html",

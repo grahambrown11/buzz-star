@@ -1,8 +1,8 @@
 function uiOnDial(e) {
     e.style.display = 'none';
     document.getElementById('oncall').style.display = '';
-    var top = document.querySelector('.chrome-phone');
-    var className = top.className;
+    let top = document.querySelector('.buzz-inner');
+    let className = top.className;
     className = className.replace(/w3-border-(green|black)/, 'w3-border-red');
     top.className = className;
 }
@@ -15,33 +15,43 @@ function uiOnHangup() {
     document.getElementById('number').value = '';
     document.getElementById('tx').dataset.action = 'tx';
     document.getElementById('tx').title = 'Transfer';
-    var top = document.querySelector('.chrome-phone');
-    var className = top.className;
+    let top = document.querySelector('.buzz-inner');
+    let className = top.className;
     className = className.replace(/w3-border-(red|black)/, 'w3-border-green');
     top.className = className;
     document.getElementById('dial').innerHTML = 'Dial';
 }
 
 function uiUpdateStatus() {
-    var top = document.querySelector('.chrome-phone');
-    var className = top.className;
+    function updateIcon(color) {
+        let icon = document.querySelector("link[rel~='icon']");
+        if (icon) {
+            icon.href = 'img/icon-' + color + '-32.png';
+        }
+    }
+    let top = document.querySelector('.buzz-inner');
+    let className = top.className;
     if (chromePhone.getStatus() === 'offhook') {
         uiOnDial(document.getElementById('dial'));
         className = className.replace(/w3-border-(black|green)/, 'w3-border-red');
-        document.querySelector('.chrome-phone').className = className;
-        updateMute();
-        updateHold();
+        document.querySelector('.buzz-inner').className = className;
+        uiUpdateMute();
+        uiUpdateHold();
+        updateIcon('red');
     } else if (chromePhone.getStatus() === 'onhook') {
         className = className.replace(/w3-border-(black|red)/, 'w3-border-green');
-        document.querySelector('.chrome-phone').className = className;
+        document.querySelector('.buzz-inner').className = className;
         uiOnHangup();
+        updateIcon('green');
     } else if (chromePhone.getStatus() === 'ringing') {
         className = className.replace(/w3-border-(black|green)/, 'w3-border-red');
-        document.querySelector('.chrome-phone').className = className;
+        document.querySelector('.buzz-inner').className = className;
         document.getElementById('dial').innerHTML = 'Answer';
+        updateIcon('red');
     } else {
         className = className.replace(/w3-border-(red|green)/, 'w3-border-black');
-        document.querySelector('.chrome-phone').className = className;
+        document.querySelector('.buzz-inner').className = className;
+        updateIcon('blue');
     }
     if (chromePhone.isLoggedIn()) {
         document.getElementById('login').style.display = 'none';
@@ -57,11 +67,11 @@ function uiUpdateStatus() {
         document.getElementById('logout').style.display = 'none';
         document.getElementById('dial-pad').style.display = 'none';
     }
-    updateMessages();
+    uiUpdateMessages();
 }
 
-function updateMute() {
-    var mute = document.getElementById('mute');
+function uiUpdateMute() {
+    let mute = document.getElementById('mute');
     if (chromePhone.isMuted()) {
         mute.title = 'Unmute';
         mute.querySelector('i').className = 'fa fa-microphone-slash';
@@ -71,8 +81,8 @@ function updateMute() {
     }
 }
 
-function updateHold() {
-    var hold = document.getElementById('hold');
+function uiUpdateHold() {
+    let hold = document.getElementById('hold');
     if (chromePhone.isOnHold()) {
         hold.title = 'Resume';
         hold.querySelector('i').className = 'fa fa-play';
@@ -82,16 +92,16 @@ function updateHold() {
     }
 }
 
-function updateMessages() {
+function uiUpdateMessages() {
     if (chromePhone.getErrorMessage()) {
-        var err = document.getElementById('error');
+        let err = document.getElementById('error');
         err.innerHTML = chromePhone.getErrorMessage();
         err.style.display = '';
     } else {
         document.getElementById('error').style.display = 'none';
     }
     if (chromePhone.getInfoMessage()) {
-        var inf = document.getElementById('info');
+        let inf = document.getElementById('info');
         inf.innerHTML = chromePhone.getInfoMessage();
         inf.style.display = '';
     } else {
@@ -99,26 +109,50 @@ function updateMessages() {
     }
 }
 
-function updateFromBackground() {
-    uiUpdateStatus();
-}
-
 document.addEventListener('DOMContentLoaded', function() {
 
+    console.log('Popup loaded, url=' + window.location.href);
+
+    if (window.location.href.indexOf('type=popout') !== -1) {
+        document.getElementById('popout').style.display = 'none';
+    } else {
+        document.getElementById('popout').addEventListener('click', function() {
+            chromePhone.popoutWindow();
+        });
+    }
+
+    let broadcast = undefined;
     // check we're running as an extension
     if ('chrome' in window && chrome.extension) {
-        var bg = chrome.extension.getBackgroundPage();
+        broadcast = new BroadcastChannel('buzz_bus');
+        broadcast.onmessage = function(e) {
+            console.log('buzz_bus message received', e.data);
+            if (e.source !== window && e.data && e.data.action) {
+                if (e.data.action === 'updateMessages') {
+                    uiUpdateMessages();
+                } else if (e.data.action === 'updateStatus') {
+                    uiUpdateStatus();
+                } else if (e.data.action === 'updateMute') {
+                    uiUpdateMute();
+                } else if (e.data.action === 'updateHold') {
+                    uiUpdateHold();
+                } else if (e.data.action === 'setPhoneNumber') {
+                    document.getElementById('number').value = chromePhone.getPhoneNumber();
+                }
+            }
+        };
+        let bg = chrome.extension.getBackgroundPage();
         window.chromePhone = bg.chromePhone;
         if (!window.chromePhone.hasMicAccess()) {
-            var mic = document.getElementById('mic-access');
+            let mic = document.getElementById('mic-access');
             mic.style.display = '';
             mic.href = chrome.extension.getURL('microphone.html');
         }
         uiUpdateStatus();
     } else {
         // not an extension add scripts
-        var s2 = document.getElementsByTagName('script')[0];
-        var s1 = document.createElement('script');
+        let s2 = document.getElementsByTagName('script')[0];
+        let s1 = document.createElement('script');
         s1.src = 'chrome-phone.js';
         s2.parentNode.insertBefore(s1, s2);
         setTimeout(function() {
@@ -126,8 +160,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 250);
     }
 
-    var keys = document.querySelectorAll('.dial-pad .key');
-    for (var i=0; i < keys.length; i++) {
+    let keys = document.querySelectorAll('.dial-pad .key');
+    for (let i=0; i < keys.length; i++) {
         keys[i].addEventListener('mousedown', function() {
             chromePhone.startDTMF(this.dataset.value);
         });
@@ -136,23 +170,35 @@ document.addEventListener('DOMContentLoaded', function() {
             if (chromePhone.isOnCall() && document.getElementById('tx').dataset.action === 'tx') {
                 chromePhone.sendDTMF(this.dataset.value);
             } else {
-                var e = document.getElementById('number');
+                let e = document.getElementById('number');
                 e.value = chromePhone.setPhoneNumber(e.value + this.dataset.value);
+                if (broadcast) {
+                    broadcast.postMessage({action: 'setPhoneNumber'});
+                }
             }
         });
     }
 
-    document.getElementById('number').addEventListener('keyup', function(e) {
+    document.getElementById('number').addEventListener('keyup', function() {
         this.value = chromePhone.setPhoneNumber(this.value);
+        if (broadcast) {
+            broadcast.postMessage({action: 'setPhoneNumber'});
+        }
     });
 
     document.getElementById('number').addEventListener('paste', function() {
         this.value = chromePhone.setPhoneNumber(this.value);
+        if (broadcast) {
+            broadcast.postMessage({action: 'setPhoneNumber'});
+        }
     });
 
     document.getElementById('number-clear').addEventListener('click', function() {
         document.getElementById('number').value = '';
         chromePhone.setPhoneNumber('');
+        if (broadcast) {
+            broadcast.postMessage({action: 'setPhoneNumber'});
+        }
     });
 
     document.getElementById('dial').addEventListener('click', function() {

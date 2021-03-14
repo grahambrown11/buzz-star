@@ -40,7 +40,16 @@ gulp.task('bundle', gulp.series('manifest', () => {
         debug: debug
     })
     .transform(babelify.configure({
-        presets: ['es2015']
+        "presets": [
+            [
+                "env",
+                {
+                    "targets": {
+                        "chrome": "60"
+                    }
+                }
+            ]
+        ]
     }))
     .bundle().on('error', (e) => {
         log(e);

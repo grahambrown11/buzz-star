@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Options | Buzz*</title>
+    <title>Buzz* Options</title>
     <style>
         body {
             margin: 0;
@@ -56,7 +56,6 @@
 <div id="options">
     <div id="crm-settings" class="option" style="display: none">
         <label>Settings:</label>
-
     </div>
     <div class="server">
         <h3 class="s1">Server 1:</h3>
@@ -94,11 +93,19 @@
     </div>
     <div class="option">
         <label for="auto_login">Auto Login:</label>
-        <input id="auto_login" type="checkbox" tabindex="3">
+        <input id="auto_login" type="checkbox" tabindex="3"> (Login to the servers on startup)
+    </div>
+    <div class="option">
+        <label for="auto_answer">Auto Answer:</label>
+        <input id="auto_answer" type="checkbox" tabindex="3"> (Answer incoming calls after 2 seconds)
     </div>
     <div class="option">
         <label for="hijack_links">Handle Tel Links:</label>
-        <input id="hijack_links" type="checkbox" tabindex="3">
+        <input id="hijack_links" type="checkbox" tabindex="3"> (Handle phone number links on a web page)
+    </div>
+    <div class="option">
+        <label for="start_popout">Start Popout:</label>
+        <input id="start_popout" type="checkbox" tabindex="3"> (Start as popout window)
     </div>
     <div class="option">
         <label for="external_api">Allow API From:</label>

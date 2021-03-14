@@ -2,11 +2,13 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Popup | Buzz*</title>
+    <title>Buzz*</title>
     <link rel="stylesheet" href="css/w3.css">
     <link rel="stylesheet" href="css/font-awesome.min.css">
+    <link rel="shortcut icon" href="img/icon-blue-32.png">
     <style>
-        .chrome-phone {
+        .buzz-inner {
+            margin: auto;
             width: 200px;
         }
         #number {
@@ -46,88 +48,91 @@
     </style>
     <script src="popup.js"></script>
 </head>
-<body class="w3-gray">
-<div class="chrome-phone w3-container w3-topbar w3-border-black">
-    <header class="w3-row">
-        <div class="w3-col s12 w3-center">
-            <img src="img/logo.png">
-        </div>
-    </header>
-    <div id="dial-pad" class="dial-pad" style="display: none">
-        <div class="in-num">
-            <input id="number" class="w3-input w3-left w3-gray" type="text" maxlength="15">
-            <a id="number-clear" class="clear-btn w3-left"><i class="fa fa-times-circle-o"></i></a>
-        </div>
-        <a class="w3-button w3-circle w3-black key" data-value="1">
-            <div class="num">1</div>
-            <div class="txt">&nbsp;</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="2">
-            <div class="num">2</div>
-            <div class="txt">ABC</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="3">
-            <div class="num">3</div>
-            <div class="txt">DEF</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="4">
-            <div class="num">4</div>
-            <div class="txt">GHI</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="5">
-            <div class="num">5</div>
-            <div class="txt">JKL</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="6">
-            <div class="num">6</div>
-            <div class="txt">MNO</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="7">
-            <div class="num">7</div>
-            <div class="txt">PQRS</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="8">
-            <div class="num">8</div>
-            <div class="txt">TUV</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="9">
-            <div class="num">9</div>
-            <div class="txt">WXYZ</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="*">
-            <div class="num">*</div>
-            <div class="txt">&nbsp;</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="0">
-            <div class="num">0</div>
-            <div class="txt">&nbsp;</div>
-        </a>
-        <a class="w3-button w3-circle w3-black key" data-value="#">
-            <div class="num">#</div>
-            <div class="txt">&nbsp;</div>
-        </a>
-        <a id="dial" class="w3-button w3-block w3-round w3-green w3-hover-green w3-hover-opacity">Dial</a>
-        <div id="oncall" style="display: none">
-            <a id="hangup" class="w3-button w3-block w3-round w3-red w3-hover-red w3-hover-opacity">Hangup</a>
-            <a id="transfer" class="w3-button w3-block w3-round w3-green w3-hover-green w3-hover-opacity" style="display: none">Transfer</a>
-            <div class="w3-clear"></div>
-            <div class="w3-bar w3-round w3-gray">
-                <a id="mute" title="Mute" data-action="mute" class="w3-bar-item w3-button" style="width: 33%"><i class="fa fa-microphone"></i></a>
-                <a id="hold" title="Hold" data-action="hold" class="w3-bar-item w3-button" style="width: 34%"><i class="fa fa-pause"></i></a>
-                <a id="tx" title="Transfer" data-action="tx" class="w3-bar-item w3-button" style="width: 33%"><i class="fa fa-exchange"></i></a>
+<body class="w3-black">
+<div class="buzz-outer">
+    <div class="buzz-inner w3-gray w3-container w3-topbar w3-border-black">
+        <header class="w3-row">
+            <div class="w3-col s12 w3-center">
+                <img src="img/logo.png">
+            </div>
+        </header>
+        <div id="dial-pad" class="dial-pad" style="display: none">
+            <div class="in-num">
+                <input id="number" class="w3-input w3-left w3-gray" type="text" maxlength="15">
+                <a id="number-clear" class="clear-btn w3-left"><i class="fa fa-times-circle-o"></i></a>
+            </div>
+            <a class="w3-button w3-circle w3-black key" data-value="1">
+                <div class="num">1</div>
+                <div class="txt">&nbsp;</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="2">
+                <div class="num">2</div>
+                <div class="txt">ABC</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="3">
+                <div class="num">3</div>
+                <div class="txt">DEF</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="4">
+                <div class="num">4</div>
+                <div class="txt">GHI</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="5">
+                <div class="num">5</div>
+                <div class="txt">JKL</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="6">
+                <div class="num">6</div>
+                <div class="txt">MNO</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="7">
+                <div class="num">7</div>
+                <div class="txt">PQRS</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="8">
+                <div class="num">8</div>
+                <div class="txt">TUV</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="9">
+                <div class="num">9</div>
+                <div class="txt">WXYZ</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="*">
+                <div class="num">*</div>
+                <div class="txt">&nbsp;</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="0">
+                <div class="num">0</div>
+                <div class="txt">&nbsp;</div>
+            </a>
+            <a class="w3-button w3-circle w3-black key" data-value="#">
+                <div class="num">#</div>
+                <div class="txt">&nbsp;</div>
+            </a>
+            <a id="dial" class="w3-button w3-block w3-round w3-green w3-hover-green w3-hover-opacity">Dial</a>
+            <div id="oncall" style="display: none">
+                <a id="hangup" class="w3-button w3-block w3-round w3-red w3-hover-red w3-hover-opacity">Hangup</a>
+                <a id="transfer" class="w3-button w3-block w3-round w3-green w3-hover-green w3-hover-opacity" style="display: none">Transfer</a>
+                <div class="w3-clear"></div>
+                <div class="w3-bar w3-round w3-gray">
+                    <a id="mute" title="Mute" data-action="mute" class="w3-bar-item w3-button" style="width: 33%"><i class="fa fa-microphone"></i></a>
+                    <a id="hold" title="Hold" data-action="hold" class="w3-bar-item w3-button" style="width: 34%"><i class="fa fa-pause"></i></a>
+                    <a id="tx" title="Transfer" data-action="tx" class="w3-bar-item w3-button" style="width: 33%"><i class="fa fa-exchange"></i></a>
+                </div>
             </div>
         </div>
+        <footer>
+            <div class="w3-center">
+                <a id="login" title="login" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none"><i class="fa fa-sign-in"></i></a>
+                <a id="logout" title="logout" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none"><i class="fa fa-sign-out"></i></a>
+                <a id="mic-access" title="mic access" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none" target="_blank"><i class="fa fa-microphone-slash"></i></a>
+                <a id="settings" title="settings" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black"><i class="fa fa-cog"></i></a>
+                <a id="popout" title="popout" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black"><i class="fa fa-external-link"></i></a>
+            </div>
+            <div id="error" class="w3-panel w3-pale-red w3-leftbar w3-border-red" style="display: none"></div>
+            <div id="info" class="w3-panel w3-pale-yellow w3-leftbar w3-border-yellow" style="display: none"></div>
+        </footer>
     </div>
-    <footer>
-        <div class="w3-center">
-            <a id="login" title="login" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none"><i class="fa fa-sign-in"></i></a>
-            <a id="logout" title="logout" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none"><i class="fa fa-sign-out"></i></a>
-            <a id="mic-access" title="mic access" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none" target="_blank"><i class="fa fa-microphone-slash"></i></a>
-            <a id="settings" title="settings" class="w3-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black"><i class="fa fa-cog"></i></a>
-        </div>
-        <div id="error" class="w3-panel w3-pale-red w3-leftbar w3-border-red" style="display: none"></div>
-        <div id="info" class="w3-panel w3-pale-yellow w3-leftbar w3-border-yellow" style="display: none"></div>
-    </footer>
 </div>
 </body>
 </html>

@@ -18,7 +18,9 @@ let sync_opts = {
     },
     auto_login: true,
     external_api: '',
-    hijack_links: false
+    hijack_links: false,
+    auto_answer: false,
+    start_popout: false
 };
 
 let local_opts = {
@@ -43,6 +45,8 @@ function save_options_ui() {
     sync_opts.external_api = document.getElementById('external_api').value;
     sync_opts.auto_login = document.getElementById('auto_login').checked;
     sync_opts.hijack_links = document.getElementById('hijack_links').checked;
+    sync_opts.auto_answer = document.getElementById('auto_answer').checked;
+    sync_opts.start_popout = document.getElementById('start_popout').checked;
     local_opts.media_input = document.getElementById('media_input').value;
     local_opts.media_output = document.getElementById('media_output').value;
     local_opts.ring_output = document.getElementById('ring_output').value;
@@ -57,6 +61,12 @@ function save_options_ui() {
             chrome.extension.getBackgroundPage().chromePhone.updateOptions(sync_opts, local_opts);
         });
     });
+    if (sync_opts.auto_answer) {
+        chrome.permissions.request({permissions: ['idle']}, function(granted) {
+            console.log('Idle permission granted: ' + granted);
+        });
+
+    }
 }
 
 function restore_options_ui() {
@@ -111,6 +121,8 @@ function restore_options_ui() {
                 document.getElementById('external_api').value = sync_items.external_api;
                 document.getElementById('auto_login').checked = sync_items.auto_login;
                 document.getElementById('hijack_links').checked = sync_items.hijack_links;
+                document.getElementById('auto_answer').checked = sync_items.auto_answer;
+                document.getElementById('start_popout').checked = sync_items.start_popout;
             });
 
         });

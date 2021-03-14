@@ -501,7 +501,7 @@ function ChromePhone() {
 
     function checkExternalAPIURL(url) {
         if (typeof state.externalAPIURL !== 'undefined' && typeof url !== 'undefined') {
-            return  url === state.externalAPIURL;
+            return state.externalAPIURL.test(url);
         }
         return false;
     }
@@ -623,7 +623,7 @@ function ChromePhone() {
         state.autoAnswer = sync_opts.auto_answer;
         state.externalAPIURL = undefined;
         if (sync_opts.external_api) {
-            state.externalAPIURL = sync_opts.external_api;
+            state.externalAPIURL = new RegExp(sync_opts.external_api);
         }
 
         if (local_opts) {

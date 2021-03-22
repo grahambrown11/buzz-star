@@ -42,7 +42,8 @@ function ChromePhone() {
         autoAnswer: false,
         broadcast: new BroadcastChannel('buzz_bus'),
         popoutWindowId: undefined,
-        callLog: []
+        callLog: [],
+        lastDialedNumber: undefined
     };
     let tone = new Tone(state.audioContext);
     let testTone = new Tone(new AudioContext());
@@ -78,10 +79,20 @@ function ChromePhone() {
         if (state.callLog.length > 20) {
             state.callLog.pop();
         }
+        if (type === 'Outgoing') {
+            state.lastDialedNumber = number;
+            if ('chrome' in window) {
+                chrome.storage.local.set({last_dialed_number: state.lastDialedNumber});
+            }
+        }
     }
 
     function updateLastCallLogToSuccessful() {
         state.callLog[0].success = true;
+        storeCallLog();
+    }
+
+    function storeCallLog() {
         if ('chrome' in window) {
             chrome.storage.local.set({call_log: state.callLog});
         }
@@ -107,6 +118,7 @@ function ChromePhone() {
                 status_code: 486,
                 reason_phrase: 'Busy Here'
             });
+            storeCallLog();
             return;
         }
 
@@ -127,6 +139,7 @@ function ChromePhone() {
             state.incoming_answer = false;
             state.call = undefined;
             onhook();
+            storeCallLog();
         });
         state.call.on('ended', function (e) {
             logger.debug('ended');
@@ -644,6 +657,12 @@ function ChromePhone() {
                     state.callLog = data.call_log;
                 }
             });
+
+            chrome.storage.local.get('last_dialed_number', function (data) {
+                if (typeof data.last_dialed_number !== 'undefined') {
+                    state.lastDialedNumber = data.last_dialed_number;
+                }
+            });
         }
 
         window.chromePhone.updateOptions(sync_opts, local_opts);
@@ -870,12 +889,14 @@ function ChromePhone() {
                 state.call = undefined;
                 onhook();
                 notifyExternalOfError();
+                storeCallLog();
             },
             ended: function (data) {
                 logger.debug('call ended');
                 tone.boopBoop();
                 state.call = undefined;
                 onhook();
+                storeCallLog();
             },
             confirmed: function (data) {
                 logger.debug('call confirmed');
@@ -1270,6 +1291,10 @@ function ChromePhone() {
 
     this.getCallLog = function () {
         return state.callLog;
+    }
+
+    this.getLastDialedNumber = function () {
+        return state.lastDialedNumber;
     }
 
 }

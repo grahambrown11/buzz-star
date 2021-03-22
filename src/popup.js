@@ -377,7 +377,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (chromePhone.getStatus() === 'ringing') {
             chromePhone.answer();
         } else {
-            if (!document.getElementById('number').value) return;
+            if (!document.getElementById('number').value) {
+                if (chromePhone.getLastDialedNumber()) {
+                    document.getElementById('number').value =
+                        chromePhone.setPhoneNumber(chromePhone.getLastDialedNumber());
+                }
+                return;
+            }
             uiOnDial(btn);
             chromePhone.call(document.getElementById('servers').value);
         }

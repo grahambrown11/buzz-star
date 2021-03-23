@@ -1,6 +1,8 @@
 function uiOnDial(e) {
     e.style.display = 'none';
     document.getElementById('oncall').style.display = '';
+    document.getElementById('hangup').style.display = '';
+    document.getElementById('silence').style.display = 'none';
     let top = document.querySelector('.buzz-inner');
     let className = top.className;
     className = className.replace(/w3-border-(green|black)/, 'w3-border-red');
@@ -12,6 +14,10 @@ function uiOnHangup() {
     document.getElementById('transfer').style.display = 'none';
     document.getElementById('oncall').style.display = 'none';
     document.getElementById('dial').style.display = '';
+    document.getElementById('dial').title = 'Dial';
+    document.getElementById('hangup').style.display = 'none';
+    document.getElementById('silence').style.display = 'none';
+    document.getElementById('transfer').style.display = 'none';
     document.getElementById('number').value = '';
     document.getElementById('tx').dataset.action = 'tx';
     document.getElementById('tx').title = 'Transfer';
@@ -19,12 +25,11 @@ function uiOnHangup() {
     let className = top.className;
     className = className.replace(/w3-border-(red|black)/, 'w3-border-green');
     top.className = className;
-    document.getElementById('dial').innerHTML = 'Dial';
 }
 
 function uiUpdateStatus() {
     function updateIcon(color) {
-        let icon = document.querySelector("link[rel~='icon']");
+        let icon = document.querySelector('link[rel~="icon"]');
         if (icon) {
             icon.href = 'img/icon-' + color + '-32.png';
         }
@@ -46,7 +51,9 @@ function uiUpdateStatus() {
     } else if (chromePhone.getStatus() === 'ringing') {
         className = className.replace(/w3-border-(black|green)/, 'w3-border-red');
         document.querySelector('.buzz-inner').className = className;
-        document.getElementById('dial').innerHTML = 'Answer';
+        document.getElementById('dial').title = 'Answer';
+        document.getElementById('hangup').style.display = '';
+        document.getElementById('silence').style.display = '';
         updateIcon('red');
     } else {
         className = className.replace(/w3-border-(red|green)/, 'w3-border-black');
@@ -56,7 +63,7 @@ function uiUpdateStatus() {
     if (chromePhone.isLoggedIn()) {
         document.getElementById('login').style.display = 'none';
         document.getElementById('logout').style.display = '';
-        document.getElementById('dial-pad').style.display = '';
+        document.getElementById('logged-in').style.display = '';
         document.getElementById('number').value = chromePhone.getPhoneNumber();
         document.getElementById('number').focus();
     } else {
@@ -65,9 +72,10 @@ function uiUpdateStatus() {
             document.getElementById('login').style.display = '';
         }
         document.getElementById('logout').style.display = 'none';
-        document.getElementById('dial-pad').style.display = 'none';
+        document.getElementById('logged-in').style.display = 'none';
     }
     uiUpdateMessages();
+    uiRenderCallLog();
 }
 
 function uiUpdateMute() {
@@ -89,6 +97,32 @@ function uiUpdateHold() {
     } else {
         hold.title = 'Hold';
         hold.querySelector('i').className = 'fa fa-pause';
+        if (document.getElementById('tx').dataset.action !== 'tx') {
+            uiToggleTransfer(false);
+        }
+    }
+}
+
+function uiToggleTransfer(hold) {
+    let tx = document.getElementById('tx');
+    if (tx.dataset.action === 'tx') {
+        tx.dataset.action = 'cancel';
+        tx.title = 'Cancel Transfer';
+        document.getElementById('number').value = '';
+        document.getElementById('hangup').style.display = 'none';
+        document.getElementById('transfer').style.display = '';
+        if (hold && !chromePhone.isOnHold()) {
+            chromePhone.hold();
+        }
+    } else {
+        tx.dataset.action = 'tx';
+        tx.title = 'Transfer';
+        document.getElementById('hangup').style.display = '';
+        document.getElementById('transfer').style.display = 'none';
+        document.getElementById('number').value = chromePhone.getPhoneNumber();
+        if (hold && chromePhone.isOnHold()) {
+            chromePhone.hold();
+        }
     }
 }
 
@@ -109,8 +143,75 @@ function uiUpdateMessages() {
     }
 }
 
+function uiRenderCallLog() {
+    function generateRecord(type, success, display, number, date) {
+        const record = document.getElementById('call-record-template').content.firstElementChild.cloneNode(true);
+        record.dataset.number = number;
+        let typeClass = '', title = type;
+        if (type === 'Incoming' && !success) {
+            typeClass += ' fa-level-down missed';
+        } else if (type === 'Incoming' || type === 'Outgoing') {
+            typeClass += ' fa-long-arrow-right';
+            typeClass += ' ' + type.toLowerCase();
+        }
+        if (success) {
+            if (type === 'Incoming') {
+                typeClass += ' w3-text-green';
+            } else {
+                typeClass += ' w3-text-blue';
+            }
+            title += ' Answered';
+        } else {
+            if (type === 'Incoming') {
+                title += ' Missed';
+            } else {
+                title += ' No answer';
+            }
+            typeClass += ' w3-text-red';
+        }
+        const icon = record.querySelector('.call-type .fa');
+        icon.className += typeClass;
+        icon.title = title;
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let dateDisplay = monthNames[date.getMonth()] + ', ';
+        if (date.getDate() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getDate() + ' ';
+        if (date.getHours() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getHours() + ':';
+        if (date.getMinutes() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getMinutes();
+        record.querySelector('.call-date').innerText = dateDisplay;
+        record.querySelector('.call-display').innerText = display;
+        record.addEventListener('click', function() {
+            let e = document.getElementById('number');
+            e.value = chromePhone.setPhoneNumber(this.dataset.number);
+            e.dispatchEvent(new KeyboardEvent('keyup'));
+            document.querySelector('.tablink[data-tab="phone"]').dispatchEvent(new MouseEvent('click'));
+        });
+        document.getElementById('list').appendChild(record);
+    }
+    if (document.getElementById('list').style.display === '') {
+        const callLog = chromePhone.getCallLog();
+        if (callLog.length === 0) {
+            document.getElementById('list').innerHTML = '<div>No call records</div>';
+        } else {
+            document.getElementById('list').innerHTML = '';
+            for (let i = 0; i < callLog.length; i++) {
+                generateRecord(callLog[i].type, callLog[i].success, callLog[i].display, callLog[i].number, new Date(callLog[i].time));
+            }
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
 
+    let i;
     console.log('Popup loaded, url=' + window.location.href);
 
     if (window.location.href.indexOf('type=popout') !== -1) {
@@ -118,6 +219,32 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         document.getElementById('popout').addEventListener('click', function() {
             chromePhone.popoutWindow();
+        });
+    }
+
+    let tabLinks = document.querySelectorAll('.tablink');
+    for (i=0; i < tabLinks.length; i++) {
+        tabLinks[i].addEventListener('click', function() {
+            let tab = document.querySelector('.tab.show');
+            if (tab) {
+                tab.className = tab.className.replace(' show', '');
+            }
+            let tabLink = document.querySelector('.tablink.w3-border-black');
+            if (tabLink) {
+                tabLink.className = tabLink.className.replace(' w3-border-black', '');
+            }
+            document.getElementById('list').innerHTML = '';
+            document.getElementById('sliders').innerHTML = '';
+            tab = document.getElementById(this.dataset.tab);
+            if (tab) {
+                tab.className += ' show';
+                if (this.dataset.tab === 'list') {
+                    uiRenderCallLog();
+                } else if (this.dataset.tab === 'sliders') {
+                    renderSliders();
+                }
+            }
+            this.className += ' w3-border-black';
         });
     }
 
@@ -136,6 +263,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     uiUpdateMute();
                 } else if (e.data.action === 'updateHold') {
                     uiUpdateHold();
+                } else if (e.data.action === 'hideSilenceButton') {
+                    document.getElementById('silence').style.display = 'none';
                 } else if (e.data.action === 'setPhoneNumber') {
                     document.getElementById('number').value = chromePhone.getPhoneNumber();
                 }
@@ -160,7 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 250);
     }
 
-    let keys = document.querySelectorAll('.dial-pad .key');
+    let keys = document.querySelectorAll('.num-pad .key');
     for (let i=0; i < keys.length; i++) {
         keys[i].addEventListener('mousedown', function() {
             chromePhone.startDTMF(this.dataset.value);
@@ -210,6 +339,11 @@ document.addEventListener('DOMContentLoaded', function() {
         chromePhone.hangup(false);
     });
 
+    document.getElementById('silence').addEventListener('click', function() {
+        this.style.display = 'none';
+        chromePhone.silence();
+    });
+
     document.getElementById('mute').addEventListener('click', function() {
         this.querySelector('i').className = '';
         chromePhone.mute();
@@ -221,29 +355,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.getElementById('tx').addEventListener('click', function() {
-        if (this.dataset.action === 'tx') {
-            this.dataset.action = 'cancel';
-            this.title = 'Cancel Transfer';
-            chromePhone.hold();
-            document.getElementById('number').value = '';
-            document.getElementById('hangup').style.display = 'none';
-            document.getElementById('transfer').style.display = '';
-        } else {
-            this.title = 'Transfer';
-            chromePhone.hold();
-            document.getElementById('hangup').style.display = '';
-            document.getElementById('transfer').style.display = 'none';
-            document.getElementById('number').value = chromePhone.getPhoneNumber();
-            this.dataset.action = 'tx';
-        }
+        uiToggleTransfer(true);
     });
 
     document.getElementById('transfer').addEventListener('click', function() {
-        chromePhone.transfer(document.getElementById('number').value);
-        document.getElementById('hangup').style.display = '';
-        document.getElementById('transfer').style.display = 'none';
-        document.getElementById('tx').dataset.action = 'tx';
-        document.getElementById('tx').title = 'Transfer';
+        transfer();
     });
 
     document.getElementById('settings').addEventListener('click', function() {
@@ -262,7 +378,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.addEventListener('keyup', function(e) {
         if (e.key === 'Enter') {
-            call(document.getElementById('dial'));
+            if (chromePhone.getStatus() === 'offhook') {
+                if (document.getElementById('transfer').style.display === '') {
+                    transfer();
+                }
+            } else {
+                call(document.getElementById('dial'));
+            }
         }
     });
 
@@ -270,9 +392,92 @@ document.addEventListener('DOMContentLoaded', function() {
         if (chromePhone.getStatus() === 'ringing') {
             chromePhone.answer();
         } else {
-            if (!document.getElementById('number').value) return;
+            if (!document.getElementById('number').value) {
+                if (chromePhone.getLastDialedNumber()) {
+                    document.getElementById('number').value =
+                        chromePhone.setPhoneNumber(chromePhone.getLastDialedNumber());
+                }
+                return;
+            }
             uiOnDial(btn);
-            chromePhone.call(false);
+            chromePhone.call(document.getElementById('servers').value);
+        }
+    }
+
+    function transfer() {
+        if (!document.getElementById('number').value) return;
+        chromePhone.transfer(document.getElementById('number').value);
+        if (document.getElementById('tx').dataset.action !== 'tx') {
+            uiToggleTransfer(false);
+        }
+    }
+
+    function renderSliders() {
+        if (document.getElementById('sliders').style.display === '') {
+            function populateSelect(select, items, value) {
+                let selected = 0;
+                for (let i = 0; i < items.length; i++) {
+                    let option = document.createElement('option');
+                    option.value = items[i].id;
+                    option.text = items[i].name;
+                    select.appendChild(option);
+                    if (items[i].id === value)
+                        selected = i;
+                }
+                select.options.selectedIndex = selected;
+            }
+            const template = document.getElementById('sliders-template').content.firstElementChild.cloneNode(true);
+            let mediaInputSelect = template.querySelector('#media_input');
+            populateSelect(mediaInputSelect, chromePhone.getAudioInputs(), chromePhone.getCurrenntAudioInputId());
+            mediaInputSelect.addEventListener('change', function() {
+                console.log('input change', this.value);
+                chromePhone.setAudioInput(this.value);
+            });
+            let mediaOutputSelect = template.querySelector('#media_output');
+            populateSelect(mediaOutputSelect, chromePhone.getAudioOutputs(), chromePhone.getCurrenntAudioOutputId());
+            mediaOutputSelect.addEventListener('change', function() {
+                console.log('output change', this.value);
+                chromePhone.setAudioOutput(this.value);
+            });
+            document.getElementById('sliders').appendChild(template);
+            window.requestAnimationFrame(levels);
+        }
+    }
+
+    function levels() {
+        if (document.getElementById('sliders').style.display === '') {
+            setMeter('input', chromePhone.getInputVolume());
+            setMeter('output', chromePhone.getOutputVolume());
+            window.requestAnimationFrame(levels);
+        }
+    }
+
+    function setMeter(type, volume) {
+        let max = 166;
+        let width = max - Math.floor(max * volume[0] / 100);
+        if (width > max) {
+            width = max;
+        } else if (width < 0) {
+            width = 0;
+        }
+        let overlay = document.querySelector('.meter.' + type + ' .overlay');
+        if (overlay) {
+            overlay.style.width = width + 'px';
+        }
+        let pos = Math.floor(max * volume[1] / 100);
+        if (pos > max) {
+            pos = max;
+        } else if (pos < 0) {
+            pos = 0;
+        }
+        let peak = document.querySelector('.meter.' + type + ' .peak');
+        if (peak) {
+            if (pos > 0) {
+                peak.style.display = 'block';
+                peak.style.left = pos + 'px';
+            } else {
+                peak.style.display = '';
+            }
         }
     }
 

@@ -43,7 +43,28 @@ function ChromePhone() {
         broadcast: new BroadcastChannel('buzz_bus'),
         popoutWindowId: undefined,
         callLog: [],
-        lastDialedNumber: undefined
+        lastDialedNumber: undefined,
+        microphone: {
+            source: undefined,
+            destination: undefined,
+            gain: undefined
+        },
+        meter: {
+            input: {
+                streamSource: undefined,
+                processor: undefined,
+                volume: 0,
+                peak: 0,
+                peakTime: undefined
+            },
+            output: {
+                streamSource: undefined,
+                processor: undefined,
+                volume: 0,
+                peak: 0,
+                peakTime: undefined
+            }
+        }
     };
     let tone = new Tone(state.audioContext);
     let testTone = new Tone(new AudioContext());
@@ -71,9 +92,33 @@ function ChromePhone() {
         }
     }
 
+    function getMicrophone(callback) {
+        if (!state.microphone.destination) {
+            state.microphone.destination = state.audioContext.createMediaStreamDestination();
+        }
+        let constraints = {
+            audio: true
+        }
+        if (state.audioInput) {
+            constraints.audio = {deviceId: {exact: state.audioInput}};
+        }
+        if (state.microphone.source) {
+            state.microphone.source.mediaStream.getAudioTracks()[0].stop();
+            state.microphone.source.disconnect();
+        }
+        navigator.getUserMedia(constraints, function (stream) {
+            state.microphone.source = state.audioContext.createMediaStreamSource(stream);
+            state.microphone.source.connect(state.microphone.destination);
+            createMeter('input', state.microphone.source);
+            callback(state.microphone.destination.stream);
+        }, function (err) {
+            checkMicError(err);
+        });
+    }
+
     function addCallLog(type, display, number) {
         state.callLog.unshift(
-            {time: new Date().getDate(), type: type, success: false, display: display, number: number}
+            {time: new Date().getTime(), type: type, success: false, display: display, number: number}
         );
         // for now limiting the list to 20
         if (state.callLog.length > 20) {
@@ -258,6 +303,39 @@ function ChromePhone() {
             }
             state.audioOutput.srcObject = stream;
             state.audioOutput.play();
+            createMeter('output', state.audioContext.createMediaStreamSource(stream));
+        }
+    }
+
+    function createMeter(type, streamSource) {
+        state.meter[type].volume = 0;
+        state.meter[type].peak = 0;
+        state.meter[type].streamSource = streamSource;
+        state.meter[type].processor = state.audioContext.createScriptProcessor(1024, 2, 2);
+        state.meter[type].processor.onaudioprocess = function (event) {
+            let sum = 0;
+            let buf;
+            buf = event.inputBuffer.getChannelData(0);
+            for (let i = 0; i < buf.length; i++) {
+                sum += buf[i] * buf[i];
+            }
+            let rms = Math.sqrt(sum / buf.length);
+            // try get it to a percentage, not sure where the 1.4 comes in was from an example...
+            let vol = Math.floor(rms * 100 * 1.4);
+            if (vol > state.meter[type].peak) {
+                state.meter[type].peakTime = window.performance.now();
+                state.meter[type].peak = vol;
+            } else if ((window.performance.now() - state.meter[type].peakTime) > 500) {
+                state.meter[type].peakTime = window.performance.now();
+                state.meter[type].peak = Math.max(vol, (state.meter[type].peak * 0.95));
+            }
+            state.meter[type].volume = vol;
+        };
+        state.meter[type].streamSource.connect(state.meter[type].processor);
+        if (type === 'input') {
+            state.meter[type].processor.connect(state.microphone.destination);
+        } else {
+            state.meter[type].processor.connect(state.audioContext.destination);
         }
     }
 
@@ -309,6 +387,29 @@ function ChromePhone() {
         state.audioOutput.pause();
         updateOverallStatus();
         clearNotification();
+        if (state.microphone.source) {
+            if (state.microphone.source.mediaStream) {
+                state.microphone.source.mediaStream.getAudioTracks()[0].stop();
+            }
+            state.microphone.source.disconnect();
+            state.microphone.source = undefined;
+        }
+        if (state.meter.input.processor) {
+            state.meter.input.processor.disconnect();
+            state.meter.input.processor = undefined;
+        }
+        if (state.meter.output.processor) {
+            state.meter.output.processor.disconnect();
+            state.meter.output.processor = undefined;
+        }
+        if (state.meter.output.streamSource) {
+            state.meter.output.streamSource.disconnect();
+            state.meter.output.streamSource = undefined;
+        }
+        state.meter.input.volume = 0;
+        state.meter.input.peak = 0;
+        state.meter.output.volume = 0;
+        state.meter.output.peak = 0;
     }
 
     function offhook() {
@@ -934,11 +1035,16 @@ function ChromePhone() {
         };
         state.errorMessage = undefined;
         state.dialedNumber = phoneNumber;
-        state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
-        let callUri = 'sip:' + state.dialedNumber + '@' + srv.sip_server_host;
-        logger.debug('caling: %s', callUri);
-        state.call = srv.connection.jssip.call(callUri, getConnectionOptions(srv.pcConfig, eventHandlers));
-        offhook();
+        getMicrophone(function (stream) {
+            let options = getConnectionOptions(srv.pcConfig, eventHandlers);
+            delete options.mediaConstraints;
+            options.mediaStream = stream;
+            let callUri = 'sip:' + state.dialedNumber + '@' + srv.sip_server_host;
+            state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
+            logger.debug('calling: %s', callUri);
+            state.call = srv.connection.jssip.call(callUri, options);
+            offhook();
+        });
     };
 
     function getConnectionOptions(pcConfig, eventHandlers) {
@@ -1075,10 +1181,7 @@ function ChromePhone() {
     };
 
     this.isOnCall = function () {
-        if (state.call) {
-            return true;
-        }
-        return false;
+        return !!state.call;
     };
 
     this.getAudioInputs = function () {
@@ -1092,12 +1195,21 @@ function ChromePhone() {
                 if (deviceId === state.audioInputs[i].id) {
                     state.audioInput = deviceId;
                     logger.debug('set audio input to %s', state.audioInput);
+                    if (state.microphone.source) {
+                        getMicrophone(function (stream) {
+                            logger.debug('changed input source');
+                        });
+                    }
                     return;
                 }
             }
         }
         logger.debug('default audio input');
         state.audioInput = undefined;
+    };
+
+    this.getCurrenntAudioInputId = function() {
+        return state.audioInputId;
     };
 
     this.getAudioOutputs = function () {
@@ -1119,6 +1231,10 @@ function ChromePhone() {
         logger.debug('default audio output');
         state.audioOutput.setSinkId('default');
         tone.audioSinkId = 'default';
+    };
+
+    this.getCurrenntAudioOutputId = function() {
+        return state.audioOutputId;
     };
 
     this.setRingOutput = function (deviceId) {
@@ -1295,6 +1411,20 @@ function ChromePhone() {
 
     this.getLastDialedNumber = function () {
         return state.lastDialedNumber;
+    }
+
+    this.getInputVolume = function () {
+        if (state.call) {
+            return [state.meter.input.volume, state.meter.input.peak];
+        }
+        return [0, 0];
+    }
+
+    this.getOutputVolume = function () {
+        if (state.call) {
+            return [state.meter.output.volume, state.meter.output.peak];
+        }
+        return [0, 0];
     }
 
 }

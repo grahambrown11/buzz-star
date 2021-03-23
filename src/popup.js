@@ -144,7 +144,7 @@ function uiUpdateMessages() {
 }
 
 function uiRenderCallLog() {
-    function generateRecord(type, success, display, number) {
+    function generateRecord(type, success, display, number, date) {
         const record = document.getElementById('call-record-template').content.firstElementChild.cloneNode(true);
         record.dataset.number = number;
         let typeClass = '', title = type;
@@ -172,7 +172,22 @@ function uiRenderCallLog() {
         const icon = record.querySelector('.call-type .fa');
         icon.className += typeClass;
         icon.title = title;
-        record.querySelector('.call-detail').innerText = display;
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let dateDisplay = monthNames[date.getMonth()] + ', ';
+        if (date.getDate() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getDate() + ' ';
+        if (date.getHours() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getHours() + ':';
+        if (date.getMinutes() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getMinutes();
+        record.querySelector('.call-date').innerText = dateDisplay;
+        record.querySelector('.call-display').innerText = display;
         record.addEventListener('click', function() {
             let e = document.getElementById('number');
             e.value = chromePhone.setPhoneNumber(this.dataset.number);
@@ -188,7 +203,7 @@ function uiRenderCallLog() {
         } else {
             document.getElementById('list').innerHTML = '';
             for (let i = 0; i < callLog.length; i++) {
-                generateRecord(callLog[i].type, callLog[i].success, callLog[i].display, callLog[i].number);
+                generateRecord(callLog[i].type, callLog[i].success, callLog[i].display, callLog[i].number, new Date(callLog[i].time));
             }
         }
     }
@@ -416,13 +431,53 @@ document.addEventListener('DOMContentLoaded', function() {
             populateSelect(mediaInputSelect, chromePhone.getAudioInputs(), chromePhone.getCurrenntAudioInputId());
             mediaInputSelect.addEventListener('change', function() {
                 console.log('input change', this.value);
-                chromePhone.setAudioInput(mediaInputSelect);
+                chromePhone.setAudioInput(this.value);
             });
             let mediaOutputSelect = template.querySelector('#media_output');
             populateSelect(mediaOutputSelect, chromePhone.getAudioOutputs(), chromePhone.getCurrenntAudioOutputId());
+            mediaOutputSelect.addEventListener('change', function() {
+                console.log('output change', this.value);
+                chromePhone.setAudioOutput(this.value);
+            });
             document.getElementById('sliders').appendChild(template);
-            // TODO mic / speaker meter update uning window.requestAnimationFrame();
-            // https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame
+            window.requestAnimationFrame(levels);
+        }
+    }
+
+    function levels() {
+        if (document.getElementById('sliders').style.display === '') {
+            setMeter('input', chromePhone.getInputVolume());
+            setMeter('output', chromePhone.getOutputVolume());
+            window.requestAnimationFrame(levels);
+        }
+    }
+
+    function setMeter(type, volume) {
+        let max = 166;
+        let width = max - Math.floor(max * volume[0] / 100);
+        if (width > max) {
+            width = max;
+        } else if (width < 0) {
+            width = 0;
+        }
+        let overlay = document.querySelector('.meter.' + type + ' .overlay');
+        if (overlay) {
+            overlay.style.width = width + 'px';
+        }
+        let pos = Math.floor(max * volume[1] / 100);
+        if (pos > max) {
+            pos = max;
+        } else if (pos < 0) {
+            pos = 0;
+        }
+        let peak = document.querySelector('.meter.' + type + ' .peak');
+        if (peak) {
+            if (pos > 0) {
+                peak.style.display = 'block';
+                peak.style.left = pos + 'px';
+            } else {
+                peak.style.display = '';
+            }
         }
     }
 

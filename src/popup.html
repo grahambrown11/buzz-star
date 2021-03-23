@@ -81,22 +81,22 @@
             margin-top: 5px;
         }
         footer {
-            margin-top: 5px;
+            padding: 5px 0;
         }
         #error, #info {
             margin-top: 5px;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
         #list {
             margin-top: 8px;
-            max-height: 450px;
+            max-height: 350px;
             overflow: hidden scroll;
         }
         .call-record {
             cursor: pointer;
             border-bottom: 1px dashed #4e4e4e;
         }
-        .call-record .call-detail {
+        .call-record .call-date, .call-record .call-display {
             padding-left: 5px;
         }
         .call-record .call-type .fa.missed {
@@ -139,6 +139,14 @@
             background-color: rgb(85, 85, 85);
             transition: width 0.1s ease 0s;
         }
+        .meter .peak {
+            display: none;
+            position: absolute;
+            width: 2px;
+            height: 10px;
+            top: 0;
+            background-color: red;
+        }
     </style>
     <script src="popup.js"></script>
 </head>
@@ -152,17 +160,17 @@
         </header>
         <div id="logged-in" style="display: none">
             <div class="w3-row">
-                <button class="tablink w3-col s6 w3-button no-pad-button w3-bottombar w3-border-black" title="Phone Keypad" data-tab="phone">
+                <button class="tablink w3-col s4 w3-button no-pad-button w3-bottombar w3-border-black" title="Phone Keypad" data-tab="phone">
                     <i class="fa fa-phone"></i>
                 </button>
-                <button class="tablink w3-col s6 w3-button no-pad-button w3-bottombar" title="Call Log" data-tab="list">
+                <button class="tablink w3-col s4 w3-button no-pad-button w3-bottombar" title="Call Log" data-tab="list">
                     <i class="fa fa-list"></i>
                 </button>
-                <!-- removing for now as the functionality is not working yet...
+                <!-- removing for now as the functionality is not working yet...-->
                 <button class="tablink w3-col s4 w3-button no-pad-button w3-bottombar" title="Call Settings" data-tab="sliders">
                     <i class="fa fa-sliders"></i>
                 </button>
-                -->
+
             </div>
             <div id="phone" class="tab dial-pad show">
                 <div class="w3-row" style="margin: 0 -2px">
@@ -279,7 +287,9 @@
         <div class="w3-col s1 call-type">
             <i class="fa"></i>
         </div>
-        <div class="w3-col s11 call-detail"></div>
+        <div class="w3-col s11 call-date"></div>
+        <div class="w3-col s1">&nbsp;</div>
+        <div class="w3-col s11 call-display"></div>
     </div>
 </template>
 <template id="sliders-template">
@@ -292,6 +302,7 @@
             <div class="meter input">
                 <div class="bar"></div>
                 <div class="overlay"></div>
+                <div class="peak"></div>
             </div>
         </div>
         <div class="w3-col s12">
@@ -302,6 +313,7 @@
             <div class="meter output">
                 <div class="bar"></div>
                 <div class="overlay"></div>
+                <div class="peak"></div>
             </div>
         </div>
     </div>

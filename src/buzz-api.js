@@ -68,7 +68,7 @@ function BuzzApi() {
      */
     this.sendSettings = function(settings) {
         this.sendAction({
-            action: ' set-settings',
+            action: 'set-settings',
             settings: settings
         });
     }

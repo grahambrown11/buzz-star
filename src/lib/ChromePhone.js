@@ -718,7 +718,10 @@ function ChromePhone() {
                         logger.debug('Runtime connection disconnected: %o', disconnectedPort);
                         let pos = state.externalAPIPort.indexOf(disconnectedPort);
                         if (pos >= 0) {
-                            state.externalAPIPort.slice(pos, 1);
+                            logger.debug('removed from externalAPIPort');
+                            state.externalAPIPort.splice(pos, 1);
+                        } else {
+                            logger.debug('could not find externalAPIPort, %i', pos);
                         }
                     });
                 }

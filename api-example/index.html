@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Buzz* API Example</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="bootstrap.min.css" rel="stylesheet">
+    <link href="bootstrap-nightfall.min.css" rel="stylesheet" media="(prefers-color-scheme: dark)">
+    <script src="bootstrap.bundle.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h1>Buzz* API Example</h1>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-sm-8 col-md-6 col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    API Status&nbsp;
+                </div>
+                <div class="card-footer">
+                    <div class="row">
+                        <div id="status" class="col-10 text-muted">Checking ...</div>
+                        <div class="col-2 text-end">
+                            <div id="busy" class="spinner-border spinner-border-sm text-warning" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="actions" class="col-sm-8 col-md-6 col-lg-4" style="display: none">
+            <div class="card">
+                <div class="card-header">
+                    Actions
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">
+                            <button id="login" type="button" class="btn btn-sm btn-outline-primary m-1">Login</button>
+                        </li>
+                        <li class="list-group-item">
+                            <input id="number" type="text" class="form-control form-control-sm" value="123">
+                            <button id="dial" type="button" class="btn btn-sm btn-outline-primary m-1">Dial</button>
+                        </li>
+                        <li class="list-group-item">
+                            <input id="auto_answer" type="checkbox" class="form-check-input">
+                            <label for="auto_answer">Answer incoming call</label>
+                        </li>
+                        <li class="list-group-item">
+                            <div class="mb-3 m-1">
+                                <label for="settings">Buzz* Settings</label>
+                                <textarea id="settings" rows="13" class="form-control form-control-sm"></textarea>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="position-fixed bottom-0 start-50 translate-middle-x p-5">
+    <div id="toast" class="toast align-items-center" role="alert" data-autohide="true" data-delay="8000">
+        <div class="d-flex">
+            <div class="toast-body">a toast...</div>
+            <button class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+<script>
+    function setStatus(status, busy) {
+        console.log('Status: ' + status);
+        document.getElementById('status').innerText = status;
+        document.getElementById('busy').style.display = busy ? '' : 'none';
+    }
+    function showToast(message) {
+        console.log('Toast: ' + message);
+        let toast = document.getElementById('toast');
+        toast.querySelector('.toast-body').innerHTML = message;
+        new bootstrap.Toast(toast).show();
+    }
+    function buzzCallback(event) {
+        console.log('Buzz* API Event', event);
+        if (event.action === 'error') {
+            showToast(event.error);
+        } else if (event.action === 'pong') {
+            setStatus('Connected, version: ' + event.version, false);
+            document.getElementById('actions').style.display = '';
+        } else if (event.action === 'incoming-call') {
+            let toast = '';
+            if (document.getElementById('auto_answer').checked) {
+                console.log('auto answering');
+                toast = 'Auto Answered '
+                window.buzzApi.answer();
+            } else {
+                console.log('not answering');
+            }
+            toast += 'Incoming call - ' + event.cli;
+            showToast(toast);
+        } else if (event.action === 'get-settings') {
+            let settings = JSON.parse(document.getElementById('settings').value);
+            if (settings) {
+                window.buzzApi.sendSettings(settings);
+                showToast('Settings sent');
+            } else {
+                showToast('Failed to parse settings');
+            }
+        }
+    }
+    document.getElementById('login').addEventListener('click', function (e) {
+        window.buzzApi.login();
+        showToast('Login requested');
+    });
+    document.getElementById('dial').addEventListener('click', function (e) {
+        if (parseInt(document.getElementById('number').value)) {
+            window.buzzApi.dial(document.getElementById('number').value);
+        } else {
+            showToast('Invalid number');
+        }
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+        // give the API a bit to load via the content injection script
+        setTimeout(function () {
+            if (window.buzzApi) {
+                setStatus('Connecting ...', true);
+                // set the callback
+                window.buzzApi.setCallback(buzzCallback);
+                // initiate a ping, Buzz* will send a pong then we'll know it's all connected
+                window.buzzApi.ping();
+                const settings = {
+                    sip_1: {
+                        host: 'localhost',
+                        extension: '100',
+                        password: 'abc123'
+                    },
+                    sip_2: {
+                        host: '',
+                        extension: '',
+                        password: ''
+                    }
+                }
+                document.getElementById('settings').value = JSON.stringify(settings, null, 2);
+            } else {
+                // the API not loaded
+                setStatus('Not API', false);
+            }
+        }, 300);
+    });
+</script>
+</body>
+</html>

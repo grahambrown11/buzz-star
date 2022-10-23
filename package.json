@@ -1,6 +1,6 @@
 {
   "name": "buzz-star",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": true,
   "description": "Buzz* a WebRTC Phone for Asterisk and Google Chrome™ / Chromium",
   "author": "Graham Brown",

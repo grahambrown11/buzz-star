@@ -26,7 +26,8 @@ let sync_opts = {
 let local_opts = {
     media_input: '',
     media_output: '',
-    ring_output: ''
+    ring_output: '',
+    ring_tone: '0'
 };
 
 function save_options_ui() {
@@ -50,8 +51,11 @@ function save_options_ui() {
     local_opts.media_input = document.getElementById('media_input').value;
     local_opts.media_output = document.getElementById('media_output').value;
     local_opts.ring_output = document.getElementById('ring_output').value;
+    local_opts.ring_tone = document.getElementById('ring_tone').value;
     chrome.storage.local.set(local_opts, function() {
+        console.log('saved local_opts', local_opts);
         chrome.storage.sync.set(sync_opts, function() {
+            console.log('saved sync_opts', sync_opts);
             // Update status to let user know options were saved.
             let status = document.getElementById('status');
             status.textContent = 'Options saved.';
@@ -78,6 +82,7 @@ function restore_options_ui() {
         }
 
         chrome.storage.local.get(local_opts, function(local_items) {
+            console.log('local_items', local_items);
 
             function populateSelect(select, items, value) {
                 let selected = 0;
@@ -102,10 +107,13 @@ function restore_options_ui() {
                 populateSelect(mediaOutputSelect, bg.chromePhone.getAudioOutputs(), local_items.media_output);
                 let ringOutputSelect = document.getElementById('ring_output');
                 populateSelect(ringOutputSelect, bg.chromePhone.getAudioOutputs(), local_items.ring_output);
+                let ringToneSelect = document.getElementById('ring_tone');
+                populateSelect(ringToneSelect, bg.chromePhone.getRingTones(), local_items.ring_tone);
                 document.querySelectorAll('.option.media').forEach(function(e) {e.style.display = '';})
             }
 
             chrome.storage.sync.get(sync_opts, function(sync_items) {
+                console.log('sync_items', sync_items);
                 document.getElementById('sip_1_host').value = sync_items.sip_1.host;
                 document.getElementById('sip_1_port').value = sync_items.sip_1.port;
                 document.getElementById('sip_1_path').value = sync_items.sip_1.path;
@@ -133,9 +141,11 @@ function restore_options_ui() {
         });
         let playTest = function(elem, ringtone) {
             if (elem.innerText === 'Test') {
-                chrome.extension.getBackgroundPage().chromePhone.startPlaybackTest(ringtone,
+                chrome.extension.getBackgroundPage().chromePhone.startPlaybackTest(
+                    ringtone,
                     document.getElementById('media_output').value,
-                    document.getElementById('ring_output').value);
+                    document.getElementById('ring_output').value
+                );
                 elem.innerText = 'Stop';
             } else {
                 chrome.extension.getBackgroundPage().chromePhone.stopPlaybackTest(ringtone);
@@ -143,10 +153,16 @@ function restore_options_ui() {
             }
         }
         document.getElementById('media_output_test').addEventListener('click', function() {
+            console.log('test media output')
             playTest(this, false);
         });
         document.getElementById('ring_output_test').addEventListener('click', function() {
+            console.log('test ring output')
             playTest(this, true);
+        });
+        document.getElementById('ring_tone').addEventListener('change', function(e) {
+            console.log('ring tone change to %s', e.target.value)
+            chrome.extension.getBackgroundPage().chromePhone.setRingTone(e.target.value, true);
         });
     }
 }

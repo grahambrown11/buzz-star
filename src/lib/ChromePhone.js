@@ -792,6 +792,9 @@ function ChromePhone() {
             if (local_opts.ring_output) {
                 window.chromePhone.setRingOutput(local_opts.ring_output);
             }
+            if (local_opts.ring_tone) {
+                window.chromePhone.setRingTone(local_opts.ring_tone, false);
+            }
         }
 
         let createSipServers = false;
@@ -1208,7 +1211,7 @@ function ChromePhone() {
         state.audioInput = undefined;
     };
 
-    this.getCurrenntAudioInputId = function() {
+    this.getCurrentAudioInputId = function() {
         return state.audioInputId;
     };
 
@@ -1233,7 +1236,7 @@ function ChromePhone() {
         tone.audioSinkId = 'default';
     };
 
-    this.getCurrenntAudioOutputId = function() {
+    this.getCurrentAudioOutputId = function() {
         return state.audioOutputId;
     };
 
@@ -1425,6 +1428,18 @@ function ChromePhone() {
             return [state.meter.output.volume, state.meter.output.peak];
         }
         return [0, 0];
+    }
+
+    this.getRingTones = function () {
+        return testTone.getRingTones();
+    }
+
+    this.setRingTone = function (idx, test) {
+        if (test) {
+            testTone.setRingTone(idx);
+        } else {
+            tone.setRingTone(idx);
+        }
     }
 
 }

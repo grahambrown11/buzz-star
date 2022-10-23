@@ -428,13 +428,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             const template = document.getElementById('sliders-template').content.firstElementChild.cloneNode(true);
             let mediaInputSelect = template.querySelector('#media_input');
-            populateSelect(mediaInputSelect, chromePhone.getAudioInputs(), chromePhone.getCurrenntAudioInputId());
+            populateSelect(mediaInputSelect, chromePhone.getAudioInputs(), chromePhone.getCurrentAudioInputId());
             mediaInputSelect.addEventListener('change', function() {
                 console.log('input change', this.value);
                 chromePhone.setAudioInput(this.value);
             });
             let mediaOutputSelect = template.querySelector('#media_output');
-            populateSelect(mediaOutputSelect, chromePhone.getAudioOutputs(), chromePhone.getCurrenntAudioOutputId());
+            populateSelect(mediaOutputSelect, chromePhone.getAudioOutputs(), chromePhone.getCurrentAudioOutputId());
             mediaOutputSelect.addEventListener('change', function() {
                 console.log('output change', this.value);
                 chromePhone.setAudioOutput(this.value);

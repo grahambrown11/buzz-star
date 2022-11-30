@@ -28,6 +28,7 @@ function uiOnHangup() {
 }
 
 function uiUpdateStatus() {
+    uiUpdateMessages();
     function updateIcon(color) {
         let icon = document.querySelector('link[rel~="icon"]');
         if (icon) {
@@ -61,21 +62,26 @@ function uiUpdateStatus() {
         updateIcon('blue');
     }
     if (chromePhone.isLoggedIn()) {
-        document.getElementById('login').style.display = 'none';
+        document.getElementById('login1').style.display = 'none';
+        document.getElementById('login2').style.display = 'none';
         document.getElementById('logout').style.display = '';
-        document.getElementById('logged-in').style.display = '';
+        document.getElementById('dial-pad').style.display = '';
         document.getElementById('number').value = chromePhone.getPhoneNumber();
         document.getElementById('number').focus();
     } else {
-        document.getElementById('login').style.display = 'none';
         if (chromePhone.canLoggedIn()) {
-            document.getElementById('login').style.display = '';
+            document.getElementById('login1').style.display = '';
+            document.getElementById('login2').style.display = '';
+        } else {
+            document.getElementById('login1').style.display = 'none';
+            document.getElementById('login2').style.display = 'none';
         }
         document.getElementById('logout').style.display = 'none';
-        document.getElementById('logged-in').style.display = 'none';
+        document.getElementById('dial-pad').style.display = 'none';
     }
-    uiUpdateMessages();
+    uiUpdateServers();
     uiRenderCallLog();
+    uiRenderBuzzLog();
 }
 
 function uiUpdateMute() {
@@ -143,8 +149,51 @@ function uiUpdateMessages() {
     }
 }
 
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function formatDate(timestamp, short) {
+    const date = new Date(timestamp);
+    let dateDisplay;
+    if (short) {
+        dateDisplay = monthNames[date.getMonth()] + ', ';
+    } else {
+        dateDisplay = date.getFullYear() + '-';
+        if (date.getMonth() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += (date.getMonth() + 1);
+        dateDisplay += '-';
+    }
+    if (date.getDate() < 10) {
+        dateDisplay += '0';
+    }
+    dateDisplay += date.getDate() + ' ';
+    if (date.getHours() < 10) {
+        dateDisplay += '0';
+    }
+    dateDisplay += date.getHours() + ':';
+    if (date.getMinutes() < 10) {
+        dateDisplay += '0';
+    }
+    dateDisplay += date.getMinutes();
+    if (!short) {
+        dateDisplay += ':';
+        if (date.getSeconds() < 10) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getSeconds();
+        dateDisplay += '.';
+        if (date.getMilliseconds() < 10) {
+            dateDisplay += '00';
+        } else if (date.getMilliseconds() < 100) {
+            dateDisplay += '0';
+        }
+        dateDisplay += date.getMilliseconds();
+    }
+    return dateDisplay;
+}
+
 function uiRenderCallLog() {
-    function generateRecord(type, success, display, number, date) {
+    function generateRecord(type, success, display, number, timestamp) {
         const record = document.getElementById('call-record-template').content.firstElementChild.cloneNode(true);
         record.dataset.number = number;
         let typeClass = '', title = type;
@@ -172,27 +221,15 @@ function uiRenderCallLog() {
         const icon = record.querySelector('.call-type .fa');
         icon.className += typeClass;
         icon.title = title;
-        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        let dateDisplay = monthNames[date.getMonth()] + ', ';
-        if (date.getDate() < 10) {
-            dateDisplay += '0';
-        }
-        dateDisplay += date.getDate() + ' ';
-        if (date.getHours() < 10) {
-            dateDisplay += '0';
-        }
-        dateDisplay += date.getHours() + ':';
-        if (date.getMinutes() < 10) {
-            dateDisplay += '0';
-        }
-        dateDisplay += date.getMinutes();
-        record.querySelector('.call-date').innerText = dateDisplay;
+        record.querySelector('.call-date').innerText = formatDate(timestamp, true);
         record.querySelector('.call-display').innerText = display;
         record.addEventListener('click', function() {
-            let e = document.getElementById('number');
-            e.value = chromePhone.setPhoneNumber(this.dataset.number);
-            e.dispatchEvent(new KeyboardEvent('keyup'));
-            document.querySelector('.tablink[data-tab="phone"]').dispatchEvent(new MouseEvent('click'));
+            if (chromePhone.getStatus() === 'onhook') {
+                let e = document.getElementById('number');
+                e.value = chromePhone.setPhoneNumber(this.dataset.number);
+                e.dispatchEvent(new KeyboardEvent('keyup'));
+                document.querySelector('.tablink[data-tab="phone"]').dispatchEvent(new MouseEvent('click'));
+            }
         });
         document.getElementById('list').appendChild(record);
     }
@@ -203,10 +240,53 @@ function uiRenderCallLog() {
         } else {
             document.getElementById('list').innerHTML = '';
             for (let i = 0; i < callLog.length; i++) {
-                generateRecord(callLog[i].type, callLog[i].success, callLog[i].display, callLog[i].number, new Date(callLog[i].time));
+                generateRecord(callLog[i].type, callLog[i].success, callLog[i].display, callLog[i].number, callLog[i].time);
             }
         }
     }
+}
+
+function uiUpdateServers() {
+    let servers = chromePhone.getServers();
+    if (servers.length > 0) {
+        updateServerStatus('svr1', servers[0]);
+        if (servers.length > 1) {
+            updateServerStatus('svr2', servers[1]);
+        } else {
+            updateServerStatus('svr2', {connection: 'not configured'});
+        }
+    } else {
+        updateServerStatus('svr1', {connection: 'not configured'});
+        updateServerStatus('svr2', {connection: 'not configured'});
+    }
+}
+
+function updateServerStatus(svr, server) {
+    let border = 'w3-border-black';
+    if (server.connection === 'online') {
+        border = 'w3-border-green';
+    } else if (server.connection === 'offline') {
+        border = 'w3-border-red';
+    }
+    let elem = document.getElementById(svr);
+    elem.className = elem.className.replace(/w3-border-(red|green|black)/, border);
+    if (server) {
+        elem.title = server.server + ' is ' + server.connection + ', ' + server.status;
+    }
+    let details = server.connection;
+    if (typeof server.status !== 'undefined' && server.status !== 'onhook') {
+        details += ' - busy';
+    }
+    elem.querySelector('.details').innerHTML = details;
+}
+
+function uiRenderBuzzLog() {
+    const buzzLog = chromePhone.getBuzzLog();
+    let log = '';
+    for (let i = 0; i < buzzLog.length; i++) {
+        log += formatDate(buzzLog[i].time, false) + ' - ' + buzzLog[i].message + '\n';
+    }
+    document.getElementById('buzz-log').innerHTML = log;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -366,7 +446,12 @@ document.addEventListener('DOMContentLoaded', function() {
         chrome.runtime.openOptionsPage();
     });
 
-    document.getElementById('login').addEventListener('click', function() {
+    document.getElementById('login1').addEventListener('click', function() {
+        this.style.display = 'none';
+        chromePhone.login(false);
+    });
+
+    document.getElementById('login2').addEventListener('click', function() {
         this.style.display = 'none';
         chromePhone.login(false);
     });
@@ -445,10 +530,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function levels() {
-        if (document.getElementById('sliders').style.display === '') {
-            setMeter('input', chromePhone.getInputVolume());
-            setMeter('output', chromePhone.getOutputVolume());
-            window.requestAnimationFrame(levels);
+        if (chromePhone.getStatus() === 'offhook') {
+            if (document.getElementById('sliders').style.display === '') {
+                setMeter('input', chromePhone.getInputVolume());
+                setMeter('output', chromePhone.getOutputVolume());
+                window.requestAnimationFrame(levels);
+            }
+        } else {
+            document.querySelector('.meter.input').style.display = 'none';
+            document.querySelector('.meter.output').style.display = 'none';
         }
     }
 

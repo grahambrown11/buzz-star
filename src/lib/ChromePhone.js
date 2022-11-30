@@ -64,7 +64,8 @@ function ChromePhone() {
                 peak: 0,
                 peakTime: undefined
             }
-        }
+        },
+        buzzLog: []
     };
     let tone = new Tone(state.audioContext);
     let testTone = new Tone(new AudioContext());
@@ -87,6 +88,7 @@ function ChromePhone() {
     function checkMicError(err) {
         logger.warn('Error: %s - %s', err.name, err.message);
         if ('chrome' in window && chrome.extension && (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0)) {
+            buzzLog('Permission to mic not granted');
             state.micAccess = false;
             window.open(chrome.extension.getURL('microphone.html'), 'mic_popup', 'width=500,height=300,status=no,scrollbars=no,resizable=no');
         }
@@ -143,7 +145,7 @@ function ChromePhone() {
         }
     }
 
-    function incomingCall(data, pcConfig) {
+    function incomingCall(data, cnf) {
         logger.debug('incoming call');
         let cli = 'Unknown';
         logger.debug('remote_identity: %o', data.session.remote_identity);
@@ -183,6 +185,7 @@ function ChromePhone() {
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
+            cnf.connection.status = 'onhook';
             onhook();
             storeCallLog();
         });
@@ -192,6 +195,7 @@ function ChromePhone() {
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
+            cnf.connection.status = 'onhook';
             onhook();
         });
         state.call.on('sdp', function (e) {
@@ -206,6 +210,7 @@ function ChromePhone() {
             tone.beep();
             state.infoMessage = 'On Call: ' + cli;
             state.incoming_answer = false;
+            cnf.connection.status = 'offhook';
             offhook();
             updateLastCallLogToSuccessful();
         });
@@ -232,7 +237,7 @@ function ChromePhone() {
         state.call.on('reinvite', function (e) {
             logger.debug('reinvite: %o', e);
         });
-        state.incoming_pcConfig = pcConfig;
+        state.incoming_pcConfig = cnf.pcConfig;
         state.infoMessage = 'Ringing: ' + cli;
         state.incoming_answer = true;
         updateOverallStatus();
@@ -529,7 +534,7 @@ function ChromePhone() {
         return this._theUserAgent;
     }
 
-    function createSipServer(options) {
+    function createSipServer(name, options) {
         let server = serverFromOptions(options);
         if (server.length === 0 || typeof options.extension === 'undefined' || options.extension.trim().length === 0) {
             return false;
@@ -569,18 +574,22 @@ function ChromePhone() {
             register: true,
             registrar_server: 'sip:' + cnf.sip_server_host,
             session_timers: true,
-            user_agent: window.chromePhone.getUserAgent()
+            user_agent: window.chromePhone.getUserAgent(),
+            connection_recovery_min_interval: 5,
+            connection_recovery_max_interval: 60
         };
         logger.debug('JsSIP config: %o', configuration);
         cnf.connection.jssip = new JsSIP.UA(configuration);
         cnf.connection.jssip.on('connecting', function () {
-            logger.debug('connecting to ' + cnf.sip_server);
+            logger.debug(name + ' connecting to ' + cnf.sip_server);
+            buzzLog(name + ' connecting to ' + cnf.sip_server);
             state.errorMessage = undefined;
             state.infoMessage = 'Connecting to server ...';
             updatePopupViewStatus();
         });
         cnf.connection.jssip.on('connected', function () {
-            logger.debug('connected to ' + cnf.sip_server);
+            logger.debug(name + ' connected to ' + cnf.sip_server);
+            buzzLog(name + ' connected to ' + cnf.sip_server);
             state.errorMessage = undefined;
             state.infoMessage = 'Connected to server';
             updatePopupViewStatus();
@@ -591,7 +600,8 @@ function ChromePhone() {
             }, 3000);
         });
         cnf.connection.jssip.on('disconnected', function () {
-            logger.debug('disconnected from ' + cnf.sip_server);
+            logger.debug(name + ' disconnected from ' + cnf.sip_server);
+            buzzLog(name + ' disconnected from ' + cnf.sip_server);
             cnf.connection.status = 'offline';
             cnf.connection.loggedIn = false;
             state.infoMessage = undefined;
@@ -599,20 +609,25 @@ function ChromePhone() {
             showError('Disconnected from server');
         });
         cnf.connection.jssip.on('registered', function () {
-            logger.debug('registered ' + cnf.sip_user);
+            logger.debug(name + ' registered ' + cnf.sip_user);
+            buzzLog(name + ' registered ' + cnf.sip_user + ' on ' + cnf.sip_server);
             cnf.connection.loggedIn = true;
             cnf.connection.status = 'onhook';
             state.infoMessage = undefined;
             updateOverallStatus();
         });
         cnf.connection.jssip.on('unregistered', function () {
-            logger.debug('unregistered ' + cnf.sip_user);
+            logger.debug(name + 'unregistered ' + cnf.sip_user);
+            buzzLog(name + ' unregistered ' + cnf.sip_user + ' on ' + cnf.sip_server);
+            cnf.connection.loggedIn = false;
             state.infoMessage = undefined;
             updatePopupViewStatus();
             showError('No longer registered - incoming calls will fail');
         });
         cnf.connection.jssip.on('registrationFailed', function (e) {
-            logger.debug('registrationFailed on ' + cnf.sip_user);
+            logger.debug(name + 'registrationFailed on ' + cnf.sip_user);
+            buzzLog(name + ' register of ' + cnf.sip_user + ' failed on ' + cnf.sip_server + ' - ' + e.cause);
+            cnf.connection.loggedIn = false;
             state.infoMessage = undefined;
             updatePopupViewStatus();
             showError('Registration Failed: ' + e.cause);
@@ -651,10 +666,13 @@ function ChromePhone() {
         logger.debug(this.getUserAgent());
         if ('chrome' in window && window.chrome.extension) {
             logger.debug('Is a chrome extension');
+            buzzLog('Start - UserAgent: ' + this.getUserAgent());
+
             chrome.browserAction.setIcon({path: getIcons('blue')});
 
             // listen for media device changes
             navigator.mediaDevices.ondevicechange = function () {
+                buzzLog('Media devices have changed');
                 updateDeviceList();
             };
             checkMic();
@@ -756,6 +774,12 @@ function ChromePhone() {
                 window.chromePhone.popoutWindow();
             }
 
+            chrome.storage.local.get('buzz_log', function (data) {
+                if (typeof data.buzz_log !== 'undefined' && Array.isArray(data.buzz_log)) {
+                    state.buzzLog = state.buzzLog.concat(data.buzz_log);
+                }
+            });
+
             chrome.storage.local.get('call_log', function (data) {
                 if (typeof data.call_log !== 'undefined' && Array.isArray(data.call_log)) {
                     state.callLog = data.call_log;
@@ -774,10 +798,10 @@ function ChromePhone() {
     };
 
     this.updateOptions = function (sync_opts, local_opts) {
-
         logger.debug('updateOptions(sync_opts:%o, local_opts:%o)', sync_opts, local_opts);
-        state.errorMessage = undefined;
+        buzzLog('Update Options');
 
+        state.errorMessage = undefined;
         state.hijackLinks = sync_opts.hijack_links;
         state.autoAnswer = sync_opts.auto_answer;
         state.externalAPIURL = undefined;
@@ -804,8 +828,8 @@ function ChromePhone() {
         let timeout = 50;
         if (state.servers.length > 0) {
             let server = serverFromOptions(sync_opts.sip_1);
-            if (server !== state.servers[0].sip_server &&
-                sync_opts.sip_1.extension !== state.servers[0].sip_extension &&
+            if (server !== state.servers[0].sip_server ||
+                sync_opts.sip_1.extension !== state.servers[0].sip_extension ||
                 sync_opts.sip_1.password !== state.servers[0].sip_password) {
                 createSipServers = true;
             }
@@ -816,14 +840,15 @@ function ChromePhone() {
                 } else if (server.length === 0 && state.servers.length === 2) {
                     createSipServers = true;
                 } else if (server.length > 0 && state.servers.length === 2 &&
-                    server !== state.servers[1].sip_server &&
-                    sync_opts.sip_2.extension !== state.servers[1].sip_extension &&
-                    sync_opts.sip_2.password !== state.servers[1].sip_password) {
+                    (server !== state.servers[1].sip_server ||
+                    sync_opts.sip_2.extension !== state.servers[1].sip_extension ||
+                    sync_opts.sip_2.password !== state.servers[1].sip_password)) {
                     createSipServers = true;
                 }
             }
 
             if (createSipServers) {
+                buzzLog('Servers changed, need to shutting down...');
                 logger.debug('servers changing, shutdown 1st');
                 timeout = 2000;
                 window.chromePhone.shutdown();
@@ -836,13 +861,13 @@ function ChromePhone() {
             setTimeout(function () {
                 let hasSettings = false;
                 logger.debug('Init Server 1');
-                if (createSipServer(sync_opts.sip_1)) {
+                if (createSipServer('Server 1', sync_opts.sip_1)) {
                     hasSettings = true;
                 } else {
                     logger.warn('Server 1 Missing settings');
                 }
                 logger.debug('Init Server 2');
-                if (createSipServer(sync_opts.sip_2)) {
+                if (createSipServer('Server 2', sync_opts.sip_2)) {
                     hasSettings = true;
                 } else {
                     logger.debug('Server 2 Missing settings');
@@ -850,11 +875,15 @@ function ChromePhone() {
                 if (!hasSettings) {
                     state.errorMessage = 'Missing settings';
                     logger.error('Missing settings');
+                    buzzLog('Missing server settings');
                     return;
                 }
                 logger.debug('auto_login: %s', sync_opts.auto_login);
                 if (sync_opts.auto_login) {
+                    buzzLog('Auto login enabled');
                     window.chromePhone.login(false);
+                } else {
+                    buzzLog('Auto login disabled');
                 }
             }, timeout);
         }
@@ -978,6 +1007,7 @@ function ChromePhone() {
             },
             connecting: function (data) {
                 logger.debug('call connecting');
+                srv.connection.status = 'offhook';
             },
             progress: function (data) {
                 logger.debug('call progress');
@@ -994,6 +1024,7 @@ function ChromePhone() {
                 state.infoMessage = undefined;
                 showError(errorMessage);
                 state.call = undefined;
+                srv.connection.status = 'onhook';
                 onhook();
                 notifyExternalOfError();
                 storeCallLog();
@@ -1002,11 +1033,13 @@ function ChromePhone() {
                 logger.debug('call ended');
                 tone.boopBoop();
                 state.call = undefined;
+                srv.connection.status = 'onhook';
                 onhook();
                 storeCallLog();
             },
             confirmed: function (data) {
                 logger.debug('call confirmed');
+                srv.connection.status = 'offhook';
                 tone.stopRinging();
                 tone.beep();
                 state.infoMessage = 'On Call to ' + state.dialedNumber;
@@ -1131,20 +1164,43 @@ function ChromePhone() {
 
     this.getStatus = function () {
         if (state.call) {
-            if (state.incoming_answer) return 'ringing';
+            if (state.incoming_answer) {
+                return 'ringing';
+            }
             return 'offhook';
         }
-        let status = 'offline';
         if (state.servers.length > 0) {
-            if (state.servers[0].connection.status !== 'offline') {
-                status = state.servers[0].connection.status;
+            if (state.servers.length > 1) {
+                if (state.servers[0].connection.status === 'offline' && state.servers[1].connection.status === 'offline') {
+                    // both servers are offline
+                    return 'offline';
+                }
+                if (state.servers[0].connection.status === 'offhook' || state.servers[1].connection.status === 'offhook') {
+                    // 1 of the connections is offhook (on an call...)
+                    return 'offhook';
+                }
             }
-            if (status !== 'offhook' && state.servers.length > 1 && state.servers[1].connection.status !== 'offline') {
-                status = state.servers[0].connection.status;
-            }
+            return state.servers[0].connection.status;
         }
-        return status;
+        return 'offline';
     };
+
+    this.getServers = function () {
+        let servers = [];
+        for (let i=0; i < state.servers.length; i++) {
+            let serverStatus = {
+                server: state.servers[i].sip_server,
+                connection: 'offline',
+                status: undefined
+            };
+            if (state.servers[i].connection.status !== 'offline' && state.servers[i].connection.loggedIn) {
+                serverStatus.connection = 'online';
+                serverStatus.status = state.servers[i].connection.status;
+            }
+            servers.push(serverStatus);
+        }
+        return servers;
+    }
 
     this.isMuted = function () {
         return state.mute;
@@ -1274,8 +1330,8 @@ function ChromePhone() {
         if (this.connectedToExternalAPI()) {
             logger.debug('Request settings from CRM');
             state.optionsDoc = optionsDoc;
-            // just get the settings from the 1st connection
-            state.externalAPIPort[0].postMessage({action: 'get-settings'});
+            // get the settings from the last connection
+            state.externalAPIPort[state.externalAPIPort.length - 1].postMessage({action: 'get-settings'});
         } else {
             logger.warn('No Sidebar Port, cannot request settings');
         }
@@ -1443,6 +1499,21 @@ function ChromePhone() {
         } else {
             tone.setRingTone(idx);
         }
+    }
+
+    function buzzLog(message) {
+        state.buzzLog.unshift({time: new Date().getTime(), message: message});
+        // limiting the list to 50
+        if (state.buzzLog.length > 50) {
+            state.buzzLog.pop();
+        }
+        if ('chrome' in window) {
+            chrome.storage.local.set({buzz_log: state.buzzLog});
+        }
+    }
+
+    this.getBuzzLog = function () {
+        return state.buzzLog;
     }
 
 }

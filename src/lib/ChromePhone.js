@@ -35,7 +35,7 @@ function ChromePhone() {
         audioOutputs: [],
         audioOutputId: undefined,
         ringOutputId: undefined,
-        incoming_pcConfig: undefined,
+        incoming_server: undefined,
         incoming_answer: false,
         micAccess: false,
         optionsDoc: undefined,
@@ -145,7 +145,7 @@ function ChromePhone() {
         }
     }
 
-    function incomingCall(data, cnf) {
+    function incomingCall(data, server) {
         logger.debug('incoming call');
         let cli = 'Unknown';
         logger.debug('remote_identity: %o', data.session.remote_identity);
@@ -185,8 +185,7 @@ function ChromePhone() {
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
-            cnf.connection.status = 'onhook';
-            onhook();
+            onhook(server);
             storeCallLog();
         });
         state.call.on('ended', function (e) {
@@ -195,8 +194,7 @@ function ChromePhone() {
             tone.boopBoop();
             state.incoming_answer = false;
             state.call = undefined;
-            cnf.connection.status = 'onhook';
-            onhook();
+            onhook(server);
         });
         state.call.on('sdp', function (e) {
             logger.debug('sdp %o', e);
@@ -210,8 +208,7 @@ function ChromePhone() {
             tone.beep();
             state.infoMessage = 'On Call: ' + cli;
             state.incoming_answer = false;
-            cnf.connection.status = 'offhook';
-            offhook();
+            offhook(server);
             updateLastCallLogToSuccessful();
         });
         state.call.on('hold', function (e) {
@@ -237,7 +234,7 @@ function ChromePhone() {
         state.call.on('reinvite', function (e) {
             logger.debug('reinvite: %o', e);
         });
-        state.incoming_pcConfig = cnf.pcConfig;
+        state.incoming_server = server;
         state.infoMessage = 'Ringing: ' + cli;
         state.incoming_answer = true;
         updateOverallStatus();
@@ -382,7 +379,7 @@ function ChromePhone() {
         }
     }
 
-    function onhook() {
+    function onhook(server) {
         state.infoMessage = undefined;
         state.hold = false;
         state.mute = false;
@@ -415,11 +412,17 @@ function ChromePhone() {
         state.meter.input.peak = 0;
         state.meter.output.volume = 0;
         state.meter.output.peak = 0;
+        if (typeof server !== 'undefined' && typeof server.connection !== 'undefined') {
+            server.connection.status = 'onhook';
+        }
     }
 
-    function offhook() {
+    function offhook(server) {
         updateOverallStatus();
         clearNotification();
+        if (typeof server !== 'undefined' && typeof server.connection !== 'undefined') {
+            server.connection.status = 'offhook';
+        }
     }
 
     function notifyExternalOfError() {
@@ -637,7 +640,7 @@ function ChromePhone() {
             if (data.originator === 'local')
                 return;
             logger.debug('newRTCSession from ' + cnf.sip_server_host);
-            incomingCall(data, cnf.pcConfig);
+            incomingCall(data, cnf);
         });
         cnf.connection.jssip.on('newMessage', function (data) {
             logger.debug('newMessage from ' + cnf.sip_server_host, data);
@@ -985,14 +988,14 @@ function ChromePhone() {
                 serverIdx = 0;
             }
         }
-        let srv = state.servers[serverIdx];
+        let server = state.servers[serverIdx];
         logger.debug('using server ' + (serverIdx + 1));
-        if (!srv.connection.loggedIn && state.servers.length > 1) {
+        if (!server.connection.loggedIn && state.servers.length > 1) {
             serverIdx = serverIdx === 1 ? 0 : 1;
             logger.debug('Not logged in, using server ' + (serverIdx + 1));
-            srv = state.servers[serverIdx];
+            server = state.servers[serverIdx];
         }
-        if (external && !srv.connection.loggedIn) {
+        if (external && !server.connection.loggedIn) {
             notifyExternal({action: 'error', error: 'Not Logged In'});
             return;
         }
@@ -1007,7 +1010,7 @@ function ChromePhone() {
             },
             connecting: function (data) {
                 logger.debug('call connecting');
-                srv.connection.status = 'offhook';
+                server.connection.status = 'offhook';
             },
             progress: function (data) {
                 logger.debug('call progress');
@@ -1024,8 +1027,7 @@ function ChromePhone() {
                 state.infoMessage = undefined;
                 showError(errorMessage);
                 state.call = undefined;
-                srv.connection.status = 'onhook';
-                onhook();
+                onhook(server);
                 notifyExternalOfError();
                 storeCallLog();
             },
@@ -1033,13 +1035,11 @@ function ChromePhone() {
                 logger.debug('call ended');
                 tone.boopBoop();
                 state.call = undefined;
-                srv.connection.status = 'onhook';
-                onhook();
+                onhook(server);
                 storeCallLog();
             },
             confirmed: function (data) {
                 logger.debug('call confirmed');
-                srv.connection.status = 'offhook';
                 tone.stopRinging();
                 tone.beep();
                 state.infoMessage = 'On Call to ' + state.dialedNumber;
@@ -1075,18 +1075,18 @@ function ChromePhone() {
         state.errorMessage = undefined;
         state.dialedNumber = phoneNumber;
         getMicrophone(function (stream) {
-            let options = getConnectionOptions(srv.pcConfig, eventHandlers);
+            let options = getConnectionOptions(server, eventHandlers);
             delete options.mediaConstraints;
             options.mediaStream = stream;
-            let callUri = 'sip:' + state.dialedNumber + '@' + srv.sip_server_host;
+            let callUri = 'sip:' + state.dialedNumber + '@' + server.sip_server_host;
             state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
             logger.debug('calling: %s', callUri);
-            state.call = srv.connection.jssip.call(callUri, options);
-            offhook();
+            state.call = server.connection.jssip.call(callUri, options);
+            offhook(server);
         });
     };
 
-    function getConnectionOptions(pcConfig, eventHandlers) {
+    function getConnectionOptions(server, eventHandlers) {
         let opts = {
             mediaConstraints: {
                 audio: true,
@@ -1099,9 +1099,11 @@ function ChromePhone() {
             rtcAnswerConstraints: {
                 offerToReceiveAudio: 1,
                 offerToReceiveVideo: 0
-            },
-            pcConfig: pcConfig
+            }
         };
+        if (typeof server !== 'undefined' && typeof server.pcConfig !== 'undefined') {
+            opts.pcConfig = server.pcConfig;
+        }
         if (state.audioInput) {
             // although the JsSIP definition is boolean it hands it to the browser getUserMedia which
             // has Boolean or MediaTrackConstraints https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamConstraints
@@ -1116,21 +1118,26 @@ function ChromePhone() {
     this.answer = function () {
         if (state.call) {
             tone.stopPlayback();
-            state.call.answer(getConnectionOptions(state.incoming_pcConfig));
-            offhook();
+            state.call.answer(getConnectionOptions(state.incoming_server));
+            offhook(state.incoming_server);
         }
         state.incoming_answer = false;
-        state.incoming_pcConfig = undefined;
+        state.incoming_server = undefined;
     };
 
     this.hangup = function (external) {
         state.fromExternal = external;
         state.incoming_answer = false;
-        state.incoming_pcConfig = undefined;
+        state.incoming_server = undefined;
         if (state.call) {
             state.call.terminate();
+            // fallback to clear some state if the end event not fired...
+            setTimeout(function () {
+                if (state.call) {
+                    onhook(undefined);
+                }
+            }, 150);
         }
-        onhook();
     };
 
     this.mute = function () {

@@ -64,6 +64,7 @@ function uiUpdateStatus() {
     if (chromePhone.isLoggedIn()) {
         document.getElementById('login1').style.display = 'none';
         document.getElementById('login2').style.display = 'none';
+        document.getElementById('not-connected').style.display = 'none';
         document.getElementById('logout').style.display = '';
         document.getElementById('dial-pad').style.display = '';
         document.getElementById('number').value = chromePhone.getPhoneNumber();
@@ -76,6 +77,7 @@ function uiUpdateStatus() {
             document.getElementById('login1').style.display = 'none';
             document.getElementById('login2').style.display = 'none';
         }
+        document.getElementById('not-connected').style.display = '';
         document.getElementById('logout').style.display = 'none';
         document.getElementById('dial-pad').style.display = 'none';
     }

@@ -72,6 +72,14 @@
     </div>
 </div>
 <script>
+    window.buzzApiOptions = {
+        callback: buzzCallback,
+        loaded: buzzLoaded
+    };
+    function buzzLoaded() {
+        setStatus('Connecting ...', true);
+        window.buzzApi.ping();
+    }
     function setStatus(status, busy) {
         console.log('Status: ' + status);
         document.getElementById('status').innerText = status;
@@ -123,32 +131,27 @@
         }
     });
     document.addEventListener('DOMContentLoaded', function () {
+        const settings = {
+            sip_1: {
+                host: 'localhost',
+                extension: '100',
+                password: 'abc123'
+            },
+            sip_2: {
+                host: '',
+                extension: '',
+                password: ''
+            }
+        }
+        document.getElementById('settings').value = JSON.stringify(settings, null, 2);
+
         // give the API a bit to load via the content injection script
         setTimeout(function () {
-            if (window.buzzApi) {
-                setStatus('Connecting ...', true);
-                // set the callback
-                window.buzzApi.setCallback(buzzCallback);
-                // initiate a ping, Buzz* will send a pong then we'll know it's all connected
-                window.buzzApi.ping();
-                const settings = {
-                    sip_1: {
-                        host: 'localhost',
-                        extension: '100',
-                        password: 'abc123'
-                    },
-                    sip_2: {
-                        host: '',
-                        extension: '',
-                        password: ''
-                    }
-                }
-                document.getElementById('settings').value = JSON.stringify(settings, null, 2);
-            } else {
+            if (!window.buzzApi) {
                 // the API not loaded
                 setStatus('No API', false);
             }
-        }, 300);
+        }, 1500);
     });
 </script>
 </body>

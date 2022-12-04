@@ -84,6 +84,11 @@ function uiUpdateStatus() {
     uiUpdateServers();
     uiRenderCallLog();
     uiRenderBuzzLog();
+    if (chromePhone.connectedToExternalAPI()) {
+        document.getElementById('external-api').style.display = '';
+    } else {
+        document.getElementById('external-api').style.display = 'none';
+    }
 }
 
 function uiUpdateMute() {
@@ -108,6 +113,23 @@ function uiUpdateHold() {
         if (document.getElementById('tx').dataset.action !== 'tx') {
             uiToggleTransfer(false);
         }
+    }
+}
+
+function uiUpdateMicAccess() {
+    let mic = document.getElementById('mic-access');
+    if (window.chromePhone.hasMicAccess()) {
+        mic.style.display = 'none';
+    } else {
+        mic.style.display = '';
+        mic.href = chrome.extension.getURL('microphone.html');
+    }
+}
+
+function uiUpdateMedia() {
+    uiUpdateMicAccess();
+    if (document.querySelector('.tab.show').dataset.tab === 'sliders') {
+        renderSliders();
     }
 }
 
@@ -291,6 +313,81 @@ function uiRenderBuzzLog() {
     document.getElementById('buzz-log').innerHTML = log;
 }
 
+function renderSliders() {
+    if (document.getElementById('sliders').style.display === '') {
+        const template = document.getElementById('sliders-template').content.firstElementChild.cloneNode(true);
+        let mediaInputSelect = template.querySelector('#media_input');
+        populateSelect(mediaInputSelect, chromePhone.getAudioInputs(), chromePhone.getCurrentAudioInputId());
+        mediaInputSelect.addEventListener('change', function() {
+            console.log('input change', this.value);
+            chromePhone.setAudioInput(this.value);
+        });
+        let mediaOutputSelect = template.querySelector('#media_output');
+        populateSelect(mediaOutputSelect, chromePhone.getAudioOutputs(), chromePhone.getCurrentAudioOutputId());
+        mediaOutputSelect.addEventListener('change', function() {
+            console.log('output change', this.value);
+            chromePhone.setAudioOutput(this.value);
+        });
+        document.getElementById('sliders').appendChild(template);
+        window.requestAnimationFrame(levels);
+    }
+}
+
+function populateSelect(select, items, value) {
+    let selected = 0;
+    for (let i = 0; i < items.length; i++) {
+        let option = document.createElement('option');
+        option.value = items[i].id;
+        option.text = items[i].name;
+        select.appendChild(option);
+        if (items[i].id === value)
+            selected = i;
+    }
+    select.options.selectedIndex = selected;
+}
+
+function levels() {
+    if (chromePhone.getStatus() === 'offhook') {
+        if (document.getElementById('sliders').style.display === '') {
+            setMeter('input', chromePhone.getInputVolume());
+            setMeter('output', chromePhone.getOutputVolume());
+            window.requestAnimationFrame(levels);
+        }
+    } else {
+        document.querySelector('.meter.input').style.display = 'none';
+        document.querySelector('.meter.output').style.display = 'none';
+    }
+}
+
+function setMeter(type, volume) {
+    let max = 166;
+    let width = max - Math.floor(max * volume[0] / 100);
+    if (width > max) {
+        width = max;
+    } else if (width < 0) {
+        width = 0;
+    }
+    let overlay = document.querySelector('.meter.' + type + ' .overlay');
+    if (overlay) {
+        overlay.style.width = width + 'px';
+    }
+    let pos = Math.floor(max * volume[1] / 100);
+    if (pos > max) {
+        pos = max;
+    } else if (pos < 0) {
+        pos = 0;
+    }
+    let peak = document.querySelector('.meter.' + type + ' .peak');
+    if (peak) {
+        if (pos > 0) {
+            peak.style.display = 'block';
+            peak.style.left = pos + 'px';
+        } else {
+            peak.style.display = '';
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
 
     let i;
@@ -339,7 +436,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.source !== window && e.data && e.data.action) {
                 if (e.data.action === 'updateMessages') {
                     uiUpdateMessages();
-                } else if (e.data.action === 'updateStatus') {
+                } else if (e.data.action === 'updateStatus' || e.data.action === 'externalAPIChange') {
                     uiUpdateStatus();
                 } else if (e.data.action === 'updateMute') {
                     uiUpdateMute();
@@ -349,16 +446,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('silence').style.display = 'none';
                 } else if (e.data.action === 'setPhoneNumber') {
                     document.getElementById('number').value = chromePhone.getPhoneNumber();
+                } else if (e.data.action === 'updateMediaDevices') {
+                    uiUpdateMedia();
                 }
             }
         };
-        let bg = chrome.extension.getBackgroundPage();
-        window.chromePhone = bg.chromePhone;
-        if (!window.chromePhone.hasMicAccess()) {
-            let mic = document.getElementById('mic-access');
-            mic.style.display = '';
-            mic.href = chrome.extension.getURL('microphone.html');
-        }
+        window.chromePhone = chrome.extension.getBackgroundPage().chromePhone;
+        uiUpdateMicAccess();
         uiUpdateStatus();
     } else {
         // not an extension add scripts
@@ -496,80 +590,6 @@ document.addEventListener('DOMContentLoaded', function() {
         chromePhone.transfer(document.getElementById('number').value);
         if (document.getElementById('tx').dataset.action !== 'tx') {
             uiToggleTransfer(false);
-        }
-    }
-
-    function renderSliders() {
-        if (document.getElementById('sliders').style.display === '') {
-            function populateSelect(select, items, value) {
-                let selected = 0;
-                for (let i = 0; i < items.length; i++) {
-                    let option = document.createElement('option');
-                    option.value = items[i].id;
-                    option.text = items[i].name;
-                    select.appendChild(option);
-                    if (items[i].id === value)
-                        selected = i;
-                }
-                select.options.selectedIndex = selected;
-            }
-            const template = document.getElementById('sliders-template').content.firstElementChild.cloneNode(true);
-            let mediaInputSelect = template.querySelector('#media_input');
-            populateSelect(mediaInputSelect, chromePhone.getAudioInputs(), chromePhone.getCurrentAudioInputId());
-            mediaInputSelect.addEventListener('change', function() {
-                console.log('input change', this.value);
-                chromePhone.setAudioInput(this.value);
-            });
-            let mediaOutputSelect = template.querySelector('#media_output');
-            populateSelect(mediaOutputSelect, chromePhone.getAudioOutputs(), chromePhone.getCurrentAudioOutputId());
-            mediaOutputSelect.addEventListener('change', function() {
-                console.log('output change', this.value);
-                chromePhone.setAudioOutput(this.value);
-            });
-            document.getElementById('sliders').appendChild(template);
-            window.requestAnimationFrame(levels);
-        }
-    }
-
-    function levels() {
-        if (chromePhone.getStatus() === 'offhook') {
-            if (document.getElementById('sliders').style.display === '') {
-                setMeter('input', chromePhone.getInputVolume());
-                setMeter('output', chromePhone.getOutputVolume());
-                window.requestAnimationFrame(levels);
-            }
-        } else {
-            document.querySelector('.meter.input').style.display = 'none';
-            document.querySelector('.meter.output').style.display = 'none';
-        }
-    }
-
-    function setMeter(type, volume) {
-        let max = 166;
-        let width = max - Math.floor(max * volume[0] / 100);
-        if (width > max) {
-            width = max;
-        } else if (width < 0) {
-            width = 0;
-        }
-        let overlay = document.querySelector('.meter.' + type + ' .overlay');
-        if (overlay) {
-            overlay.style.width = width + 'px';
-        }
-        let pos = Math.floor(max * volume[1] / 100);
-        if (pos > max) {
-            pos = max;
-        } else if (pos < 0) {
-            pos = 0;
-        }
-        let peak = document.querySelector('.meter.' + type + ' .peak');
-        if (peak) {
-            if (pos > 0) {
-                peak.style.display = 'block';
-                peak.style.left = pos + 'px';
-            } else {
-                peak.style.display = '';
-            }
         }
     }
 

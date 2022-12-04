@@ -70,13 +70,17 @@ function ChromePhone() {
     let tone = new Tone(state.audioContext);
     let testTone = new Tone(new AudioContext());
 
-    function checkMic() {
+    function checkMic(fromPopup) {
         // check we have access to the microphone
         logger.debug('Checking Access to mic...');
         navigator.getUserMedia({audio: true}, function (stream) {
             logger.debug('... have access to mic');
             state.micAccess = true;
             stream.getAudioTracks()[0].stop();
+            if (fromPopup) {
+                buzzLog('Permission to mic granted');
+                state.broadcast.postMessage({action: 'updateStatus'});
+            }
             if (state.audioInputs.length === 0) {
                 updateDeviceList();
             }
@@ -183,8 +187,6 @@ function ChromePhone() {
             console.log(e);
             tone.stopPlayback();
             tone.boopBoop();
-            state.incoming_answer = false;
-            state.call = undefined;
             onhook(server);
             storeCallLog();
         });
@@ -192,8 +194,6 @@ function ChromePhone() {
             logger.debug('ended');
             tone.stopPlayback();
             tone.boopBoop();
-            state.incoming_answer = false;
-            state.call = undefined;
             onhook(server);
         });
         state.call.on('sdp', function (e) {
@@ -380,6 +380,8 @@ function ChromePhone() {
     }
 
     function onhook(server) {
+        state.call = undefined;
+        state.incoming_answer = false;
         state.infoMessage = undefined;
         state.hold = false;
         state.mute = false;
@@ -387,6 +389,9 @@ function ChromePhone() {
         state.dialedNumber = '';
         state.fromExternal = false;
         state.audioOutput.pause();
+        if (typeof server !== 'undefined' && typeof server.connection !== 'undefined') {
+            server.connection.status = 'onhook';
+        }
         updateOverallStatus();
         clearNotification();
         if (state.microphone.source) {
@@ -412,17 +417,14 @@ function ChromePhone() {
         state.meter.input.peak = 0;
         state.meter.output.volume = 0;
         state.meter.output.peak = 0;
-        if (typeof server !== 'undefined' && typeof server.connection !== 'undefined') {
-            server.connection.status = 'onhook';
-        }
     }
 
     function offhook(server) {
-        updateOverallStatus();
-        clearNotification();
         if (typeof server !== 'undefined' && typeof server.connection !== 'undefined') {
             server.connection.status = 'offhook';
         }
+        updateOverallStatus();
+        clearNotification();
     }
 
     function notifyExternalOfError() {
@@ -678,12 +680,12 @@ function ChromePhone() {
                 buzzLog('Media devices have changed');
                 updateDeviceList();
             };
-            checkMic();
+            checkMic(false);
 
             chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                 if (typeof request.action !== 'undefined') {
                     if (request.action === 'check-mic') {
-                        checkMic();
+                        checkMic(true);
                     } else if (request.action === 'inject') {
                         var api_allowed = false;
                         if (typeof sender !== 'undefined') {
@@ -735,12 +737,18 @@ function ChromePhone() {
                             }
                         }
                     });
+                    if (state.broadcast) {
+                        state.broadcast.postMessage({action: 'externalAPIChange'});
+                    }
                     port.onDisconnect.addListener(function (disconnectedPort) {
                         logger.debug('Runtime connection disconnected: %o', disconnectedPort);
                         let pos = state.externalAPIPort.indexOf(disconnectedPort);
                         if (pos >= 0) {
                             logger.debug('removed from externalAPIPort');
                             state.externalAPIPort.splice(pos, 1);
+                            if (state.broadcast) {
+                                state.broadcast.postMessage({action: 'externalAPIChange'});
+                            }
                         } else {
                             logger.debug('could not find externalAPIPort, %i', pos);
                         }
@@ -811,7 +819,6 @@ function ChromePhone() {
         if (sync_opts.external_api) {
             state.externalAPIURL = new RegExp(sync_opts.external_api);
         }
-
         if (local_opts) {
             if (local_opts.media_input) {
                 window.chromePhone.setAudioInput(local_opts.media_input);
@@ -921,6 +928,9 @@ function ChromePhone() {
                 window.chromePhone.setAudioInput(audioInput);
                 window.chromePhone.setAudioOutput(audioOutput);
                 window.chromePhone.setRingOutput(ringOutput);
+                if (state.broadcast) {
+                    state.broadcast.postMessage({action: 'updateMediaDevices'});
+                }
             });
         }
     }
@@ -1026,7 +1036,6 @@ function ChromePhone() {
                 }
                 state.infoMessage = undefined;
                 showError(errorMessage);
-                state.call = undefined;
                 onhook(server);
                 notifyExternalOfError();
                 storeCallLog();
@@ -1034,7 +1043,6 @@ function ChromePhone() {
             ended: function (data) {
                 logger.debug('call ended');
                 tone.boopBoop();
-                state.call = undefined;
                 onhook(server);
                 storeCallLog();
             },

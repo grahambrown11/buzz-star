@@ -80,5 +80,18 @@ function BuzzApi() {
 (function() {
     if (!window.buzzApi) {
         window.buzzApi = new BuzzApi();
+        setTimeout(function () {
+            if (!window.buzzApiOptions) {
+                window.buzzApiOptions = {};
+            }
+            if (typeof window.buzzApiOptions.callback === 'function') {
+                console.log('has callback function');
+                window.buzzApi.setCallback(window.buzzApiOptions.callback);
+            }
+            if (typeof window.buzzApiOptions.loaded === 'function') {
+                console.log('has loaded function');
+                window.buzzApiOptions.loaded();
+            }
+        }, 50);
     }
 })();

@@ -34,29 +34,50 @@ gulp.task('manifest', gulp.series('copy', (cb) => {
     cb();
 }));
 
-gulp.task('bundle', gulp.series('manifest', () => {
-    return browserify({
-        entries: ['src/lib/ChromePhone.js'],
-        debug: debug
-    })
-    .transform(babelify.configure({
-        "presets": [
-            [
-                "env",
-                {
-                    "targets": {
-                        "chrome": "60"
-                    }
-                }
-            ]
-        ]
-    }))
-    .bundle().on('error', (e) => {
-        log(e);
-    })
-    .pipe(source('chrome-phone.js'))
-    .pipe(replace('$$version$$', pkg.version))
-    .pipe(gulp.dest(OUTPUT_DIR));
+gulp.task('bundle', gulp.series('manifest', (done) => {
+    const scripts = [
+        {
+            src: 'src/lib/BuzzWorker.js',
+            dst: 'buzz-worker.js'
+        },
+        {
+            src: 'src/lib/BuzzOffscreen.js',
+            dst: 'buzz-offscreen.js'
+        },
+        {
+            src: 'src/lib/BuzzPopup.js',
+            dst: 'buzz-popup.js'
+        },
+        {
+            src: 'src/lib/BuzzOptions.js',
+            dst: 'buzz-options.js'
+        }
+    ]
+    scripts.forEach(val => {
+        return browserify({
+            entries: [val.src],
+            debug: debug
+        })
+            .transform(babelify.configure({
+                "presets": [
+                    [
+                        "env",
+                        {
+                            "targets": {
+                                "chrome": "109"
+                            }
+                        }
+                    ]
+                ]
+            }))
+            .bundle().on('error', (e) => {
+                log(e);
+            })
+            .pipe(source(val.dst))
+            .pipe(replace('$$version$$', pkg.version))
+            .pipe(gulp.dest(OUTPUT_DIR));
+    });
+    done();
 }));
 
 gulp.task('default', gulp.series('bundle', (cb) => {

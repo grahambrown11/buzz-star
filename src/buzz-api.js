@@ -4,8 +4,6 @@ function BuzzApi() {
 
     function init() {
         window.addEventListener('message', function(event) {
-            if (event.source !== window)
-                return;
             if (event.data.type && (event.data.type === 'FROM_EXTENSION')) {
                 console.log('API received from content script: ', event);
                 if (callback) {
@@ -60,6 +58,13 @@ function BuzzApi() {
      */
     this.answer = function() {
         this.sendAction({action: 'answer'});
+    }
+
+    /**
+     * Send the Hangup action
+     */
+    this.hangup = function() {
+        this.sendAction({action: 'hangup'});
     }
 
     /**

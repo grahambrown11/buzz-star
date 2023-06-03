@@ -5,6 +5,7 @@
     <style>
         body {
             margin: 0;
+            background-color: #bbb;
         }
         #options {
             width: 570px;
@@ -16,11 +17,14 @@
         }
         .server h3 {
             margin: 4px;
-            width: 210px;
+            width: 220px;
             float: left;
         }
         .server h3.s1 {
             margin-left: 110px;
+        }
+        .server h3.s2 {
+            margin-left: 8px;
         }
         .option {
             margin-bottom: 5px;
@@ -35,6 +39,10 @@
         }
         .option input[type="text"],.option input[type="password"], .option select {
             width: 215px;
+            background-color: #ddd;
+        }
+        button {
+            background-color: #ddd;
         }
         #external_api {
             width: 440px;
@@ -50,13 +58,10 @@
             text-decoration: none;
         }
     </style>
-    <script src="options.js"></script>
+    <script src="buzz-options.js"></script>
 </head>
 <body>
 <div id="options">
-    <div id="crm-settings" class="option" style="display: none">
-        <label>Settings:</label>
-    </div>
     <div class="server">
         <h3 class="s1">Server 1:</h3>
         <h3 class="s2">Server 2:</h3>

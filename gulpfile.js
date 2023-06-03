@@ -34,51 +34,38 @@ gulp.task('manifest', gulp.series('copy', (cb) => {
     cb();
 }));
 
-gulp.task('bundle', gulp.series('manifest', (done) => {
-    const scripts = [
-        {
-            src: 'src/lib/BuzzWorker.js',
-            dst: 'buzz-worker.js'
-        },
-        {
-            src: 'src/lib/BuzzOffscreen.js',
-            dst: 'buzz-offscreen.js'
-        },
-        {
-            src: 'src/lib/BuzzPopup.js',
-            dst: 'buzz-popup.js'
-        },
-        {
-            src: 'src/lib/BuzzOptions.js',
-            dst: 'buzz-options.js'
-        }
-    ]
-    scripts.forEach(val => {
-        return browserify({
-            entries: [val.src],
-            debug: debug
-        })
-            .transform(babelify.configure({
-                "presets": [
-                    [
-                        "env",
-                        {
-                            "targets": {
-                                "chrome": "109"
-                            }
+function compileJS(src, dst) {
+    return browserify({
+        entries: [src],
+        debug: debug
+    })
+        .transform(babelify.configure({
+            "presets": [
+                [
+                    "env",
+                    {
+                        "targets": {
+                            "chrome": "109"
                         }
-                    ]
+                    }
                 ]
-            }))
-            .bundle().on('error', (e) => {
-                log(e);
-            })
-            .pipe(source(val.dst))
-            .pipe(replace('$$version$$', pkg.version))
-            .pipe(gulp.dest(OUTPUT_DIR));
-    });
-    done();
-}));
+            ]
+        }))
+        .bundle().on('error', (e) => {
+            log(e);
+        })
+        .pipe(source(dst))
+        .pipe(replace('$$version$$', pkg.version))
+        .pipe(gulp.dest(OUTPUT_DIR));
+}
+
+gulp.task('bundle', gulp.series('manifest',
+    () => compileJS('src/lib/BuzzWorker.js','buzz-worker.js'),
+    () => compileJS('src/lib/BuzzOffscreen.js','buzz-offscreen.js'),
+    () => compileJS('src/lib/BuzzPopup.js','buzz-popup.js'),
+    () => compileJS('src/lib/BuzzOptions.js','buzz-options.js'),
+    (done) => done()
+));
 
 gulp.task('default', gulp.series('bundle', (cb) => {
     log('complete!');

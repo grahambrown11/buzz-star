@@ -46,6 +46,7 @@
                         <li class="list-group-item">
                             <input id="number" type="text" class="form-control form-control-sm" value="123">
                             <button id="dial" type="button" class="btn btn-sm btn-outline-primary m-1">Dial</button>
+                            <button id="hangup" type="button" class="btn btn-sm btn-outline-primary m-1">Hangup</button>
                         </li>
                         <li class="list-group-item">
                             <input id="auto_answer" type="checkbox" class="form-check-input">
@@ -102,7 +103,7 @@
             let toast = '';
             if (document.getElementById('auto_answer').checked) {
                 console.log('auto answering');
-                toast = 'Auto Answered '
+                toast = 'Auto answered '
                 window.buzzApi.answer();
             } else {
                 console.log('not answering');
@@ -117,6 +118,15 @@
             } else {
                 showToast('Failed to parse settings');
             }
+        } else if (event.action === 'call-started') {
+            if (document.getElementById('status').innerText.indexOf('Auto Answered') === -1) {
+                showToast('Call started to ' + event.cli, false);
+            }
+        } else if (event.action === 'call-ended') {
+            showToast('Call ended', false);
+        } else if (event.action === 'disconnected') {
+            document.getElementById('actions').style.display = 'none';
+            setStatus('Disconnected', false);
         }
     }
     document.getElementById('login').addEventListener('click', function (e) {
@@ -124,11 +134,15 @@
         showToast('Login requested');
     });
     document.getElementById('dial').addEventListener('click', function (e) {
-        if (parseInt(document.getElementById('number').value)) {
+        const num = document.getElementById('number').value.replace(/[^\d\*\#]/g, '');
+        if (num.length > 0) {
             window.buzzApi.dial(document.getElementById('number').value);
         } else {
             showToast('Invalid number');
         }
+    });
+    document.getElementById('hangup').addEventListener('click', function (e) {
+        window.buzzApi.hangup();
     });
     document.addEventListener('DOMContentLoaded', function () {
         const settings = {

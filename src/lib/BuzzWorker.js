@@ -27,6 +27,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     cache.local_opts = request.data.local_opts;
                     await chrome.storage.sync.set(request.data.sync_opts);
                     cache.sync_opts = request.data.sync_opts;
+                    cache.external_api_url_regex = undefined;
                     sendResponse(true);
                     break;
                 case 'add-log':
@@ -40,9 +41,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     sendResponse(cache.buzzLog);
                     break;
                 case 'inject':
-                    logger.debug('onMessage, request: %o', request);
+                    logger.debug('onMessage, request: %o, sender: %o', request, sender);
                     await loadSyncOptions();
-                    if (sender && sender.tab && cache.external_api_url_regex && cache.external_api_url_regex.test(sender.tab.url)) {
+                    if (sender && sender.url && cache.external_api_url_regex && cache.external_api_url_regex.test(sender.url)) {
                         api_allowed = true;
                     }
                     logger.debug('send response api_allowed: %o, tel_links: %o', api_allowed, cache.sync_opts.hijack_links);
@@ -190,11 +191,14 @@ async function createOffscreen() {
 }
 
 async function loadSyncOptions() {
+    if (cache.external_api_url_regex) {
+        return;
+    }
     if (!cache.sync_opts) {
         cache.sync_opts = await chrome.storage.sync.get(default_sync_opts);
-        if (cache.sync_opts.external_api) {
-            cache.external_api_url_regex = new RegExp(cache.sync_opts.external_api);
-        }
+    }
+    if (cache.sync_opts.external_api) {
+        cache.external_api_url_regex = new RegExp(cache.sync_opts.external_api);
     }
 }
 

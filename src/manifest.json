@@ -1,20 +1,21 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "Buzz* - Phone for Google Chrome™",
   "short_name": "Buzz*",
   "description": "A WebRTC Phone for Asterisk and Google Chrome™",
   "version": "$$version$$",
+  "minimum_chrome_version": "109",
   "permissions": [
     "storage",
     "background",
-    "notifications"
+    "notifications",
+    "offscreen"
   ],
   "optional_permissions": [
     "idle"
   ],
   "background": {
-    "scripts": ["options.js", "chrome-phone.js"],
-    "persistent": true
+    "service_worker": "buzz-worker.js"
   },
   "icons": {
     "16": "img/icon-blue-16.png",
@@ -22,7 +23,7 @@
     "48": "img/icon-blue-48.png",
     "128": "img/icon-blue-128.png"
   },
-  "browser_action": {
+  "action": {
     "default_icon": {
       "16": "img/icon-blue-16.png",
       "32": "img/icon-blue-32.png",
@@ -34,14 +35,19 @@
   },
   "options_ui": {
     "page": "options.html",
-    "chrome_style": true
+    "open_in_tab": false
   },
   "incognito": "not_allowed",
   "content_scripts": [{
     "run_at": "document_start",
     "matches": ["<all_urls>"],
     "all_frames": true,
-    "js": ["inject.js"]
+    "js": ["buzz-content-script.js"]
   }],
-  "web_accessible_resources": ["buzz-api.js"]
+  "web_accessible_resources":[
+    {
+      "resources": [ "buzz-api.js" ],
+      "matches": [ "<all_urls>" ]
+    }
+  ]
 }

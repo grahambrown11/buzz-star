@@ -34,30 +34,38 @@ gulp.task('manifest', gulp.series('copy', (cb) => {
     cb();
 }));
 
-gulp.task('bundle', gulp.series('manifest', () => {
+function compileJS(src, dst) {
     return browserify({
-        entries: ['src/lib/ChromePhone.js'],
+        entries: [src],
         debug: debug
     })
-    .transform(babelify.configure({
-        "presets": [
-            [
-                "env",
-                {
-                    "targets": {
-                        "chrome": "60"
+        .transform(babelify.configure({
+            "presets": [
+                [
+                    "env",
+                    {
+                        "targets": {
+                            "chrome": "109"
+                        }
                     }
-                }
+                ]
             ]
-        ]
-    }))
-    .bundle().on('error', (e) => {
-        log(e);
-    })
-    .pipe(source('chrome-phone.js'))
-    .pipe(replace('$$version$$', pkg.version))
-    .pipe(gulp.dest(OUTPUT_DIR));
-}));
+        }))
+        .bundle().on('error', (e) => {
+            log(e);
+        })
+        .pipe(source(dst))
+        .pipe(replace('$$version$$', pkg.version))
+        .pipe(gulp.dest(OUTPUT_DIR));
+}
+
+gulp.task('bundle', gulp.series('manifest',
+    () => compileJS('src/lib/BuzzWorker.js','buzz-worker.js'),
+    () => compileJS('src/lib/BuzzOffscreen.js','buzz-offscreen.js'),
+    () => compileJS('src/lib/BuzzPopup.js','buzz-popup.js'),
+    () => compileJS('src/lib/BuzzOptions.js','buzz-options.js'),
+    (done) => done()
+));
 
 gulp.task('default', gulp.series('bundle', (cb) => {
     log('complete!');

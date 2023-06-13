@@ -74,7 +74,7 @@
             width: 50px;
             font-size: x-large;
         }
-        #login1 {
+        #login1, #not-connected {
             margin-top: 5px;
         }
         #transfer {
@@ -170,7 +170,7 @@
             white-space: nowrap;
         }
     </style>
-    <script src="popup.js"></script>
+    <script src="buzz-popup.js"></script>
 </head>
 <body class="w3-black">
 <div class="buzz-outer">
@@ -288,6 +288,7 @@
                     </div>
                 </div>
                 <div class="w3-center">
+                    <div id="not-connected">Not connected,<br/>see status (<i class="fa fa-cogs"></i>)</div>
                     <a id="login1" title="login" class="w3-button no-pad-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none"><i class="fa fa-sign-in"></i></a>
                     <a id="mic-access" title="mic access" class="w3-button no-pad-button w3-hover-none w3-border-gray w3-bottombar w3-hover-border-black" style="display: none" target="_blank"><i class="fa fa-microphone-slash"></i></a>
                 </div>
@@ -299,7 +300,10 @@
                 <p>Sliders...</p>
             </div>
             <div id="status" class="tab">
-                <div class="title">Server status:</div>
+                <div class="title">
+                    Server status:
+                    <span id="external-api" title="External API Connected" style="display: none"><i class="fa fa-plug"></i></span>
+                </div>
                 <div id="svr1" class="w3-leftbar w3-border-black">&nbsp;1: <span class="details"></span></div>
                 <div id="svr2" class="w3-leftbar w3-border-black">&nbsp;2: <span class="details"></span></div>
                 <textarea id="buzz-log" rows="15"></textarea>

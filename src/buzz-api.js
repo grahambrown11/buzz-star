@@ -4,8 +4,6 @@ function BuzzApi() {
 
     function init() {
         window.addEventListener('message', function(event) {
-            if (event.source !== window)
-                return;
             if (event.data.type && (event.data.type === 'FROM_EXTENSION')) {
                 console.log('API received from content script: ', event);
                 if (callback) {
@@ -63,6 +61,13 @@ function BuzzApi() {
     }
 
     /**
+     * Send the Hangup action
+     */
+    this.hangup = function() {
+        this.sendAction({action: 'hangup'});
+    }
+
+    /**
      * Send the settings to Buzz*
      * @param settings the settings to send
      */
@@ -80,5 +85,18 @@ function BuzzApi() {
 (function() {
     if (!window.buzzApi) {
         window.buzzApi = new BuzzApi();
+        setTimeout(function () {
+            if (!window.buzzApiOptions) {
+                window.buzzApiOptions = {};
+            }
+            if (typeof window.buzzApiOptions.callback === 'function') {
+                console.log('has callback function');
+                window.buzzApi.setCallback(window.buzzApiOptions.callback);
+            }
+            if (typeof window.buzzApiOptions.loaded === 'function') {
+                console.log('has loaded function');
+                window.buzzApiOptions.loaded();
+            }
+        }, 50);
     }
 })();

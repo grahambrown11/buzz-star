@@ -1,15 +1,15 @@
 'use strict';
 
 import Logger from './Logger.js';
-import Tone from './Tone.js';
+import RingTone from './RingTone.js';
 import JsSIP from 'jssip';
 
-function ChromePhone() {
+function BuzzOffscreen() {
 
     this.version = "$$version$$";
 
-    let logger = new Logger();
-    logger.debug('ChromePhone created, ver:' + this.version);
+    const logger = new Logger("BuzzOffscreen");
+    logger.debug('BuzzOffscreen created, ver:' + this.version);
 
     let state = {
         previouslyLoggedIn: false,
@@ -17,17 +17,16 @@ function ChromePhone() {
         dialedNumber: undefined,
         audioContext: new AudioContext(),
         audioOutput: new Audio(),
-        notificationId: undefined,
         servers: [],
         call: undefined,
         mute: false,
         hold: false,
+        transferring: false,
+        previousNumber: undefined,
         hijackLinks: false,
         externalAPIURL: undefined,
         externalAPIPort: [],
-        errorMessage: undefined,
-        errorTimeout: undefined,
-        infoMessage: undefined,
+        infoMessage: '',
         fromExternal: false,
         audioInputs: [],
         audioInput: undefined,
@@ -35,14 +34,12 @@ function ChromePhone() {
         audioOutputs: [],
         audioOutputId: undefined,
         ringOutputId: undefined,
-        incoming_pcConfig: undefined,
+        incoming_server: undefined,
         incoming_answer: false,
         micAccess: false,
         optionsDoc: undefined,
         autoAnswer: false,
-        broadcast: new BroadcastChannel('buzz_bus'),
-        popoutWindowId: undefined,
-        callLog: [],
+        callLog: undefined,
         lastDialedNumber: undefined,
         microphone: {
             source: undefined,
@@ -67,16 +64,308 @@ function ChromePhone() {
         },
         buzzLog: []
     };
-    let tone = new Tone(state.audioContext);
-    let testTone = new Tone(new AudioContext());
+    let tone = new RingTone(state.audioContext);
+    let testTone = new RingTone(new AudioContext());
 
-    function checkMic() {
+    this.init = function () {
+        logger.debug('init - ' + window.buzzOffscreen.getUserAgent());
+        buzzLog('Start - UserAgent: ' + window.buzzOffscreen.getUserAgent());
+
+        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            if (typeof request.action !== 'undefined') {
+                switch (request.action) {
+                    case 'check-mic':
+                        logger.debug('onMessage, request: %o', request);
+                        checkMic(true);
+                        sendResponse(true);
+                        break;
+                    case 'ping':
+                        logger.debug('onMessage, request: %o', request);
+                        sendResponse({
+                            action: 'pong',
+                            version: window.buzzOffscreen.version
+                        });
+                        break;
+                    case 'login':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.login(false);
+                        break;
+                    case 'logout':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.logout();
+                        state.previouslyLoggedIn = false;
+                        break;
+                    case 'get-status':
+                        logger.debug('onMessage, request: %o', request);
+                        sendResponse(getStatus());
+                        break;
+                    case 'check-on-call':
+                        logger.debug('onMessage, request: %o', request);
+                        sendResponse(window.buzzOffscreen.isOnCall());
+                        break;
+                    case 'get-media':
+                        logger.debug('onMessage, request: %o', request);
+                        const media = getMedia()
+                        media.ringTones = tone.getRingTones();
+                        sendResponse(media);
+                        break;
+                    case 'test-media':
+                        logger.debug('onMessage, request: %o', request);
+                        if (request.data.action === 'play') {
+                            window.buzzOffscreen.startPlaybackTest(request.data);
+                        } else {
+                            window.buzzOffscreen.stopPlaybackTest();
+                        }
+                        break;
+                    case 'set-media':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.setAudioInput(request.audioInput);
+                        window.buzzOffscreen.setAudioOutput(request.audioOutput);
+                        break;
+                    case 'load-options-from-api':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.loadSettingsFromExternalAPI();
+                        break;
+                    case 'store-options':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.updateOptions(request.data);
+                        break;
+                    case 'set-number':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.setPhoneNumber(request.data);
+                        break;
+                    case 'call':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.call(request.data);
+                        break;
+                    case 'hangup':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.hangup(false);
+                        break;
+                    case 'answer':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.answer();
+                        break;
+                    case 'silence':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.silence();
+                        break;
+                    case 'send-dtmf':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.sendDTMF(request.data);
+                        break;
+                    case 'mute':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.mute();
+                        break;
+                    case 'hold':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.hold();
+                        break;
+                    case 'transferring':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.transferring(request.data);
+                        break;
+                    case 'transfer':
+                        logger.debug('onMessage, request: %o', request);
+                        window.buzzOffscreen.transfer(request.data);
+                        break;
+                    case 'get-levels':
+                        logger.debug('onMessage, request: %o', request);
+                        sendResponse({
+                            inputVolume: buzzOffscreen.getInputVolume(),
+                            outputVolume: buzzOffscreen.getOutputVolume()
+                        });
+                        break;
+                }
+            }
+        });
+
+        chrome.runtime.onConnect.addListener(function (port) {
+            logger.debug('onConnect, port: %o', port);
+            if (typeof port.sender !== 'undefined' && state.externalAPIURL && state.externalAPIURL.test(port.sender.url)) {
+                logger.debug('External API connection allowed');
+                state.externalAPIPort.push(port);
+                port.onMessage.addListener(function (msg) {
+                    logger.debug('onMessage (Content Script): %o', msg);
+                    if (msg === 'ping') {
+                        port.postMessage('pong');
+                    } else if (typeof msg.action !== 'undefined') {
+                        switch (msg.action) {
+                            case 'ping':
+                                logger.debug('sending pong');
+                                port.postMessage({
+                                    action: 'pong',
+                                    version: window.buzzOffscreen.version
+                                });
+                                break;
+                            case 'login':
+                                window.buzzOffscreen.login(true);
+                                break;
+                            case 'call':
+                                window.buzzOffscreen.callNumber(msg.phoneNumber, true);
+                                break;
+                            case 'answer':
+                                window.buzzOffscreen.answer();
+                                break;
+                            case 'hangup':
+                                window.buzzOffscreen.hangup(true);
+                                break;
+                            case 'set-settings':
+                                logger.debug('Got settings from External API');
+                                chrome.runtime.sendMessage({
+                                    action: 'populate-options',
+                                    data: msg.settings
+                                }).then();
+                                break;
+                            default:
+                                logger.warn('unhandled action: %s', msg.action);
+                        }
+                    }
+                });
+                chrome.runtime.sendMessage({
+                    action: 'external-api-change',
+                    data: true
+                }).then();
+                port.onDisconnect.addListener(function (disconnectedPort) {
+                    logger.debug('Runtime connection disconnected: %o', disconnectedPort);
+                    let pos = state.externalAPIPort.indexOf(disconnectedPort);
+                    if (pos >= 0) {
+                        logger.debug('removed from externalAPIPort');
+                        state.externalAPIPort.splice(pos, 1);
+                        chrome.runtime.sendMessage({
+                            action: 'external-api-change',
+                            data: state.externalAPIPort.length > 0
+                        }).then();
+                    } else {
+                        logger.debug('could not find externalAPIPort, %i', pos);
+                    }
+                });
+            }
+        });
+
+        state.audioOutput.load();
+
+        (async () => {
+            const opts = await chrome.runtime.sendMessage({action: 'get-options'});
+            window.buzzOffscreen.updateOptions(opts);
+            // listen for media device changes
+            navigator.mediaDevices.ondevicechange = function () {
+                buzzLog('Media devices have changed');
+                updateDeviceList();
+            };
+            checkMic(false);
+            if (opts.sync_opts.start_popout) {
+                await chrome.runtime.sendMessage({action: 'popout-window'});
+            }
+        })();
+    };
+
+    this.updateOptions = function (opts) {
+        logger.debug('updateOptions(opts:%o)', opts);
+        state.hijackLinks = opts.sync_opts.hijack_links;
+        if (opts.sync_opts.external_api) {
+            state.externalAPIURL = new RegExp(opts.sync_opts.external_api);
+        }
+        state.autoAnswer = opts.sync_opts.auto_answer;
+
+        if (opts.local_opts) {
+            if (opts.local_opts.media_input) {
+                window.buzzOffscreen.setAudioInput(opts.local_opts.media_input);
+            }
+            if (opts.local_opts.media_output) {
+                window.buzzOffscreen.setAudioOutput(opts.local_opts.media_output);
+            }
+            if (opts.local_opts.ring_output) {
+                window.buzzOffscreen.setRingOutput(opts.local_opts.ring_output);
+            }
+            if (opts.local_opts.ring_tone) {
+                tone.setRingTone(opts.local_opts.ring_tone);
+            }
+        }
+
+        let createSipServers = false;
+        let timeout = 50;
+        if (state.servers.length > 0) {
+            let server = serverFromOptions(opts.sync_opts.sip_1);
+            if (server !== state.servers[0].sip_server ||
+                opts.sync_opts.sip_1.extension !== state.servers[0].sip_extension ||
+                opts.sync_opts.sip_1.password !== state.servers[0].sip_password) {
+                createSipServers = true;
+            }
+            if (!createSipServers) {
+                server = serverFromOptions(opts.sync_opts.sip_2);
+                if (server.length > 0 && state.servers.length === 1) {
+                    createSipServers = true;
+                } else if (server.length === 0 && state.servers.length === 2) {
+                    createSipServers = true;
+                } else if (server.length > 0 && state.servers.length === 2 &&
+                    (server !== state.servers[1].sip_server ||
+                        opts.sync_opts.sip_2.extension !== state.servers[1].sip_extension ||
+                        opts.sync_opts.sip_2.password !== state.servers[1].sip_password)) {
+                    createSipServers = true;
+                }
+            }
+
+            if (createSipServers) {
+                buzzLog('Servers options changed...');
+                logger.debug('servers changing, shutdown 1st');
+                timeout = 2000;
+                window.buzzOffscreen.shutdown();
+            }
+        } else {
+            createSipServers = true;
+        }
+
+        if (createSipServers) {
+            setTimeout(function () {
+                let hasSettings = false;
+                logger.debug('Init Server 1');
+                if (createSipServer('Server 1', opts.sync_opts.sip_1)) {
+                    hasSettings = true;
+                } else {
+                    logger.warn('Server 1 Missing settings');
+                    buzzLog('Server 1 Missing settings');
+                }
+                logger.debug('Init Server 2');
+                if (createSipServer('Server 2', opts.sync_opts.sip_2)) {
+                    hasSettings = true;
+                } else {
+                    logger.debug('Server 2 Missing settings');
+                    buzzLog('Server 1 Missing settings');
+                }
+                if (!hasSettings) {
+                    logger.error('Missing settings');
+                    buzzLog('Missing server settings');
+                    updatePopupViewMessage('Missing settings', true, 5000);
+                    return;
+                }
+                if (state.previouslyLoggedIn) {
+                    window.buzzOffscreen.login(false);
+                } else {
+                    logger.debug('auto_login: %s', opts.sync_opts.auto_login);
+                    if (opts.sync_opts.auto_login) {
+                        buzzLog('Auto login enabled');
+                        window.buzzOffscreen.login(false);
+                    } else {
+                        buzzLog('Auto login disabled');
+                    }
+                }
+            }, timeout);
+        }
+    }
+
+
+    function checkMic(fromPopup) {
         // check we have access to the microphone
         logger.debug('Checking Access to mic...');
         navigator.getUserMedia({audio: true}, function (stream) {
             logger.debug('... have access to mic');
             state.micAccess = true;
             stream.getAudioTracks()[0].stop();
+            if (fromPopup) {
+                buzzLog('Permission to mic granted');
+            }
             if (state.audioInputs.length === 0) {
                 updateDeviceList();
             }
@@ -87,10 +376,10 @@ function ChromePhone() {
 
     function checkMicError(err) {
         logger.warn('Error: %s - %s', err.name, err.message);
-        if ('chrome' in window && chrome.extension && (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0)) {
+        if (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0) {
             buzzLog('Permission to mic not granted');
             state.micAccess = false;
-            window.open(chrome.extension.getURL('microphone.html'), 'mic_popup', 'width=500,height=300,status=no,scrollbars=no,resizable=no');
+            chrome.runtime.sendMessage({action: 'open-mic-permission'}).then();
         }
     }
 
@@ -119,33 +408,32 @@ function ChromePhone() {
     }
 
     function addCallLog(type, display, number) {
-        state.callLog.unshift(
-            {time: new Date().getTime(), type: type, success: false, display: display, number: number}
-        );
-        // for now limiting the list to 20
-        if (state.callLog.length > 20) {
-            state.callLog.pop();
-        }
-        if (type === 'Outgoing') {
-            state.lastDialedNumber = number;
-            if ('chrome' in window) {
-                chrome.storage.local.set({last_dialed_number: state.lastDialedNumber});
-            }
-        }
+        state.callLog = {
+            time: new Date().getTime(),
+            type: type,
+            success: false,
+            display: display,
+            number: number
+        };
     }
 
     function updateLastCallLogToSuccessful() {
-        state.callLog[0].success = true;
-        storeCallLog();
-    }
-
-    function storeCallLog() {
-        if ('chrome' in window) {
-            chrome.storage.local.set({call_log: state.callLog});
+        if (state.callLog) {
+            state.callLog.success = true;
+            storeCallLog();
         }
     }
 
-    function incomingCall(data, cnf) {
+    function storeCallLog() {
+        if (state.callLog) {
+            chrome.runtime.sendMessage({
+                action: 'add-call-log',
+                data: state.callLog
+            }).then(state.callLog = undefined);
+        }
+    }
+
+    function incomingCall(data, server) {
         logger.debug('incoming call');
         let cli = 'Unknown';
         logger.debug('remote_identity: %o', data.session.remote_identity);
@@ -159,7 +447,7 @@ function ChromePhone() {
         }
         addCallLog('Incoming', cli, number);
         // Avoid if busy or other incoming
-        if (window.chromePhone.getStatus() === 'offhook') {
+        if (window.buzzOffscreen.getStatus() === 'offhook') {
             logger.debug('status offhook: replied with 486 "Busy Here"');
             data.session.terminate({
                 status_code: 486,
@@ -183,20 +471,14 @@ function ChromePhone() {
             console.log(e);
             tone.stopPlayback();
             tone.boopBoop();
-            state.incoming_answer = false;
-            state.call = undefined;
-            cnf.connection.status = 'onhook';
-            onhook();
+            onhook(server);
             storeCallLog();
         });
         state.call.on('ended', function (e) {
             logger.debug('ended');
             tone.stopPlayback();
             tone.boopBoop();
-            state.incoming_answer = false;
-            state.call = undefined;
-            cnf.connection.status = 'onhook';
-            onhook();
+            onhook(server);
         });
         state.call.on('sdp', function (e) {
             logger.debug('sdp %o', e);
@@ -208,39 +490,41 @@ function ChromePhone() {
             logger.debug('accepted');
             tone.stopPlayback();
             tone.beep();
-            state.infoMessage = 'On Call: ' + cli;
+            updatePopupViewMessage('On Call: ' + cli, false, 0);
             state.incoming_answer = false;
-            cnf.connection.status = 'offhook';
-            offhook();
+            offhook(server, cli);
             updateLastCallLogToSuccessful();
         });
         state.call.on('hold', function (e) {
             logger.debug('hold');
             state.hold = true;
-            updatePopupHold();
+            updateStatus();
         });
         state.call.on('unhold', function (e) {
             logger.debug('unhold');
             state.hold = false;
-            updatePopupHold();
+            if (state.transferring) {
+                state.transferring = false;
+            }
+            updateStatus();
         });
         state.call.on('muted', function (e) {
             logger.debug('muted');
             state.mute = true;
-            updatePopupMute();
+            updateStatus();
         });
         state.call.on('unmuted', function (e) {
             logger.debug('unmuted');
             state.mute = false;
-            updatePopupMute();
+            updateStatus();
         });
         state.call.on('reinvite', function (e) {
             logger.debug('reinvite: %o', e);
         });
-        state.incoming_pcConfig = cnf.pcConfig;
-        state.infoMessage = 'Ringing: ' + cli;
+        state.incoming_server = server;
+        updatePopupViewMessage('Ringing: ' + cli, false, 0);
         state.incoming_answer = true;
-        updateOverallStatus();
+        updateStatus();
 
         function startIncomingCallNotification() {
             showNotification('Incoming Call', cli, true);
@@ -250,45 +534,27 @@ function ChromePhone() {
                     setTimeout(function () {
                         if (state.call && !state.call.isEnded() && state.incoming_answer) {
                             logger.debug('Auto Answering...');
-                            window.chromePhone.answer();
+                            window.buzzOffscreen.answer();
                         } else {
                             logger.debug('Already Answered, ignoring');
                         }
                     }, 2000);
                 }
-
-                if ('chrome' in window) {
-                    chrome.permissions.contains({permissions: ['idle']}, function (hasIdleAccess) {
-                        if (hasIdleAccess) {
-                            logger.debug('Has Idle Permission, checking state...');
-                            chrome.idle.queryState((15 * 60), function (idleState) {
-                                logger.debug('IdleState: %o', idleState);
-                                if (idleState === 'active') {
-                                    logger.debug('Not Idle, Auto Answer in 2 sec');
-                                    autoAnswerCall();
-                                }
-                            });
-                        } else {
-                            logger.warn('No Idle Permission');
-                            autoAnswerCall();
-                        }
-                    });
-
-                } else {
-                    autoAnswerCall();
-                }
+                chrome.runtime.sendMessage({action: 'is-idle'}, (res) => {
+                    if (!res) {
+                        logger.debug('Not Idle or No Idle Permission, Auto Answer in 2 sec');
+                        autoAnswerCall();
+                    }
+                });
             }
         }
 
         // get the sidebar to auto answer if the request was from there...
         if (state.externalAPIPort.length > 0) {
-            for (let p = 0; p < state.externalAPIPort.length; p++) {
-                try {
-                    state.externalAPIPort[p].postMessage({action: 'incoming-call', cli: cli});
-                } catch (err) {
-                    logger.warn("Error posting to external API: %o", err);
-                }
-            }
+            sendExternal({
+                action: 'incoming-call',
+                cli: cli
+            });
             setTimeout(function () {
                 if (state.call && !state.call.isEnded() && !state.call.isEstablished()) {
                     startIncomingCallNotification();
@@ -344,54 +610,57 @@ function ChromePhone() {
         }
     }
 
-    function updatePopupViewMessages() {
-        if (state.broadcast) {
-            state.broadcast.postMessage({action: 'updateMessages'});
-        } else if ('uiUpdateMessages' in window) {
-            uiUpdateMessages();
+    function updatePopupViewMessage(message, error, timeout) {
+        state.infoMessage = '';
+        chrome.runtime.sendMessage({
+            action: 'update-message',
+            data: {
+                message: message,
+                error: error,
+                timeout: timeout
+            }
+        }).then();
+        if (!error && timeout === 0) {
+            state.infoMessage = message;
         }
     }
 
-    function updatePopupViewStatus() {
-        if (state.broadcast) {
-            state.broadcast.postMessage({action: 'updateStatus'});
-        } else if ('uiUpdateStatus' in window) {
-            uiUpdateStatus();
-        }
+    function updateStatus() {
+        chrome.runtime.sendMessage({
+            action: 'update-status',
+            data: getStatus()
+        }).then();
     }
 
     function showNotification(title, message, showAnswerButtons) {
-        if ('chrome' in window && chrome.notifications) {
-            chrome.notifications.create(state.notificationId, {
+        chrome.runtime.sendMessage({
+            action: 'show-notification',
+            data: {
                 type: 'basic',
                 title: title,
                 message: message || '',
                 iconUrl: 'img/icon-blue-128.png',
                 buttons: showAnswerButtons ? [{title: 'Answer'}, {title: 'Reject'}] : [],
                 requireInteraction: showAnswerButtons
-            }, function (id) {
-                state.notificationId = id;
-            });
-        }
+            }
+        }).then();
     }
 
-    function clearNotification() {
-        if (state.notificationId) {
-            chrome.notifications.clear(state.notificationId);
-            state.notificationId = undefined;
-        }
-    }
-
-    function onhook() {
-        state.infoMessage = undefined;
+    function onhook(server) {
+        state.call = undefined;
+        state.incoming_answer = false;
         state.hold = false;
         state.mute = false;
         state.phoneNumber = '';
         state.dialedNumber = '';
         state.fromExternal = false;
         state.audioOutput.pause();
-        updateOverallStatus();
-        clearNotification();
+        if (typeof server !== 'undefined' && typeof server.connection !== 'undefined') {
+            server.connection.status = 'onhook';
+        }
+        updateStatus();
+        updatePopupViewMessage(undefined, false, 0);
+        sendExternal({action: 'call-ended'});
         if (state.microphone.source) {
             if (state.microphone.source.mediaStream) {
                 state.microphone.source.mediaStream.getAudioTracks()[0].stop();
@@ -417,72 +686,37 @@ function ChromePhone() {
         state.meter.output.peak = 0;
     }
 
-    function offhook() {
-        updateOverallStatus();
-        clearNotification();
-    }
-
-    function notifyExternalOfError() {
-        notifyExternal({action: 'error', error: state.errorMessage});
+    function offhook(server, cli) {
+        if (typeof server !== 'undefined' && typeof server.connection !== 'undefined') {
+            server.connection.status = 'offhook';
+        }
+        updateStatus();
+        sendExternal({
+            action: 'call-started',
+            cli: cli
+        });
     }
 
     function notifyExternal(msg) {
-        if (state.fromExternal && state.externalAPIPort.length > 0) {
+        if (state.fromExternal) {
+            sendExternal(msg);
+        }
+    }
+
+    function sendExternal(msg) {
+        if (state.externalAPIPort.length > 0) {
             for (let p = 0; p < state.externalAPIPort.length; p++) {
-                state.externalAPIPort[p].postMessage(msg);
+                try {
+                    state.externalAPIPort[p].postMessage(msg);
+                } catch (err) {
+                    logger.warn("Error posting to external API: %o", err);
+                }
             }
         }
     }
 
     function showError(error) {
-        if (state.errorTimeout) {
-            clearTimeout(state.errorTimeout);
-        }
-        state.errorMessage = error;
-        updatePopupViewMessages();
-        state.errorTimeout = setTimeout(function () {
-            state.errorMessage = undefined;
-            updatePopupViewMessages();
-        }, 5000);
-    }
-
-    function updatePopupMute() {
-        if (state.broadcast) {
-            state.broadcast.postMessage({action: 'updateMute'});
-        } else if ('uiUpdateMute' in window) {
-            uiUpdateMute();
-        }
-    }
-
-    function updatePopupHold() {
-        if (state.broadcast) {
-            state.broadcast.postMessage({action: 'updateHold'});
-        } else if ('uiUpdateHold' in window) {
-            uiUpdateHold();
-        }
-    }
-
-    function getIcons(color) {
-        return {
-            '16': 'img/icon-' + color + '-16.png',
-            '32': 'img/icon-' + color + '-32.png',
-            '48': 'img/icon-' + color + '-48.png',
-            '128': 'img/icon-' + color + '-128.png'
-        };
-    }
-
-    function updateOverallStatus() {
-        let status = window.chromePhone.getStatus();
-        let icon = getIcons('blue');
-        if (status === 'offhook' || status === 'ringing') {
-            icon = getIcons('red');
-        } else if (status === 'onhook') {
-            icon = getIcons('green');
-        }
-        if ('chrome' in window && chrome.browserAction) {
-            chrome.browserAction.setIcon({path: icon});
-        }
-        updatePopupViewStatus();
+        updatePopupViewMessage(error, true, 5000);
     }
 
     function serverFromOptions(options) {
@@ -574,7 +808,7 @@ function ChromePhone() {
             register: true,
             registrar_server: 'sip:' + cnf.sip_server_host,
             session_timers: true,
-            user_agent: window.chromePhone.getUserAgent(),
+            user_agent: window.buzzOffscreen.getUserAgent(),
             connection_recovery_min_interval: 5,
             connection_recovery_max_interval: 60
         };
@@ -583,53 +817,42 @@ function ChromePhone() {
         cnf.connection.jssip.on('connecting', function () {
             logger.debug(name + ' connecting to ' + cnf.sip_server);
             buzzLog(name + ' connecting to ' + cnf.sip_server);
-            state.errorMessage = undefined;
-            state.infoMessage = 'Connecting to server ...';
-            updatePopupViewStatus();
+            updatePopupViewMessage('Connecting to server ...', false, 0);
         });
         cnf.connection.jssip.on('connected', function () {
             logger.debug(name + ' connected to ' + cnf.sip_server);
             buzzLog(name + ' connected to ' + cnf.sip_server);
-            state.errorMessage = undefined;
-            state.infoMessage = 'Connected to server';
-            updatePopupViewStatus();
-            setTimeout(function () {
-                state.infoMessage = undefined;
-                state.errorMessage = undefined;
-                updatePopupViewStatus();
-            }, 3000);
         });
         cnf.connection.jssip.on('disconnected', function () {
             logger.debug(name + ' disconnected from ' + cnf.sip_server);
             buzzLog(name + ' disconnected from ' + cnf.sip_server);
             cnf.connection.status = 'offline';
             cnf.connection.loggedIn = false;
-            state.infoMessage = undefined;
-            updateOverallStatus();
-            showError('Disconnected from server');
+            updateStatus();
+            updatePopupViewMessage('Disconnected from server', true, 5000);
         });
         cnf.connection.jssip.on('registered', function () {
             logger.debug(name + ' registered ' + cnf.sip_user);
             buzzLog(name + ' registered ' + cnf.sip_user + ' on ' + cnf.sip_server);
+            state.previouslyLoggedIn = true;
             cnf.connection.loggedIn = true;
             cnf.connection.status = 'onhook';
-            state.infoMessage = undefined;
-            updateOverallStatus();
+            updatePopupViewMessage('Connected to server', false, 5000);
+            updateStatus();
         });
         cnf.connection.jssip.on('unregistered', function () {
             logger.debug(name + 'unregistered ' + cnf.sip_user);
             buzzLog(name + ' unregistered ' + cnf.sip_user + ' on ' + cnf.sip_server);
             cnf.connection.loggedIn = false;
-            state.infoMessage = undefined;
-            updatePopupViewStatus();
+            updateStatus();
             showError('No longer registered - incoming calls will fail');
         });
         cnf.connection.jssip.on('registrationFailed', function (e) {
             logger.debug(name + 'registrationFailed on ' + cnf.sip_user);
             buzzLog(name + ' register of ' + cnf.sip_user + ' failed on ' + cnf.sip_server + ' - ' + e.cause);
             cnf.connection.loggedIn = false;
-            state.infoMessage = undefined;
-            updatePopupViewStatus();
+            updateStatus();
+            updatePopupViewMessage('Registration Failed: ' + e.cause, true);
             showError('Registration Failed: ' + e.cause);
         });
         cnf.connection.jssip.on('newRTCSession', function (data) {
@@ -637,7 +860,7 @@ function ChromePhone() {
             if (data.originator === 'local')
                 return;
             logger.debug('newRTCSession from ' + cnf.sip_server_host);
-            incomingCall(data, cnf.pcConfig);
+            incomingCall(data, cnf);
         });
         cnf.connection.jssip.on('newMessage', function (data) {
             logger.debug('newMessage from ' + cnf.sip_server_host, data);
@@ -654,244 +877,26 @@ function ChromePhone() {
         state.servers = [];
     };
 
-    function checkExternalAPIURL(url) {
-        if (typeof state.externalAPIURL !== 'undefined' && typeof url !== 'undefined') {
-            return state.externalAPIURL.test(url);
-        }
-        return false;
-    }
-
-    this.init = function (sync_opts, local_opts) {
-        logger.debug('init');
-        logger.debug(this.getUserAgent());
-        if ('chrome' in window && window.chrome.extension) {
-            logger.debug('Is a chrome extension');
-            buzzLog('Start - UserAgent: ' + this.getUserAgent());
-
-            chrome.browserAction.setIcon({path: getIcons('blue')});
-
-            // listen for media device changes
-            navigator.mediaDevices.ondevicechange = function () {
-                buzzLog('Media devices have changed');
-                updateDeviceList();
-            };
-            checkMic();
-
-            chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-                if (typeof request.action !== 'undefined') {
-                    if (request.action === 'check-mic') {
-                        checkMic();
-                    } else if (request.action === 'inject') {
-                        var api_allowed = false;
-                        if (typeof sender !== 'undefined') {
-                            api_allowed = checkExternalAPIURL(sender.url);
-                        }
-                        sendResponse({
-                            api_allowed: api_allowed,
-                            tel_links: state.hijackLinks
-                        });
-                    } else if (request.action === 'ping') {
-                        sendResponse({
-                            action: 'pong',
-                            version: window.chromePhone.version
-                        });
-                    } else if (request.action === 'call') {
-                        window.chromePhone.setPhoneNumber(request.phoneNumber);
-                        if (state.broadcast) {
-                            state.broadcast.postMessage({action: 'setPhoneNumber'});
-                        }
-                    } else {
-                        logger.debug('unknown action runtime onMessage, request: %o, sender: %o', request, sender);
-                    }
-                } else {
-                    logger.debug('unhandled runtime onMessage, request: %o, sender: %o', request, sender);
-                }
-            });
-
-            chrome.runtime.onConnect.addListener(function (port) {
-                logger.debug('onConnect, port: %o', port);
-                if (typeof port.sender !== 'undefined' && checkExternalAPIURL(port.sender.url)) {
-                    logger.debug('External API connection allowed');
-                    state.externalAPIPort.push(port);
-                    port.onMessage.addListener(function (msg) {
-                        logger.debug('onMessage (Content Script): %o', msg);
-                        if (msg === 'ping') {
-                            port.postMessage('pong');
-                        } else if (typeof msg.action !== 'undefined') {
-                            if (msg.action === 'ping') {
-                                logger.debug('sending pong');
-                                port.postMessage({action: 'pong', version: window.chromePhone.version});
-                            } else if (msg.action === 'call') {
-                                window.chromePhone.callNumber(msg.phoneNumber, true);
-                            } else if (msg.action === 'answer' && state.call) {
-                                window.chromePhone.answer();
-                            } else if (msg.action === 'login') {
-                                window.chromePhone.login(true);
-                            } else if (msg.action === 'set-settings') {
-                                window.chromePhone.updateSettingsScreen(msg.settings);
-                            }
-                        }
-                    });
-                    port.onDisconnect.addListener(function (disconnectedPort) {
-                        logger.debug('Runtime connection disconnected: %o', disconnectedPort);
-                        let pos = state.externalAPIPort.indexOf(disconnectedPort);
-                        if (pos >= 0) {
-                            logger.debug('removed from externalAPIPort');
-                            state.externalAPIPort.splice(pos, 1);
-                        } else {
-                            logger.debug('could not find externalAPIPort, %i', pos);
-                        }
-                    });
-                }
-            });
-
-            chrome.notifications.onButtonClicked.addListener(function (id, button) {
-                logger.debug('notification ' + id + ' button ' + button + ' clicked');
-                clearNotification();
-                if (button === 0) {
-                    window.chromePhone.answer();
-                } else {
-                    window.chromePhone.hangup(false);
-                }
-            });
-
-            chrome.notifications.onClicked.addListener(function () {
-                window.chromePhone.popoutWindow();
-            });
-
-            chrome.notifications.onClosed.addListener(function () {
-                state.notificationId = undefined;
-            });
-
-            chrome.windows.onRemoved.addListener(function (windowId) {
-                logger.debug('window closed %d', windowId);
-                if (state.popoutWindowId === windowId) {
-                    state.popoutWindowId = undefined;
-                }
-            });
-
-            if (sync_opts.start_popout && !state.popoutWindowId) {
-                window.chromePhone.popoutWindow();
-            }
-
-            chrome.storage.local.get('buzz_log', function (data) {
-                if (typeof data.buzz_log !== 'undefined' && Array.isArray(data.buzz_log)) {
-                    state.buzzLog = state.buzzLog.concat(data.buzz_log);
-                }
-            });
-
-            chrome.storage.local.get('call_log', function (data) {
-                if (typeof data.call_log !== 'undefined' && Array.isArray(data.call_log)) {
-                    state.callLog = data.call_log;
-                }
-            });
-
-            chrome.storage.local.get('last_dialed_number', function (data) {
-                if (typeof data.last_dialed_number !== 'undefined') {
-                    state.lastDialedNumber = data.last_dialed_number;
-                }
-            });
-        }
-
-        window.chromePhone.updateOptions(sync_opts, local_opts);
-        state.audioOutput.load();
-    };
-
-    this.updateOptions = function (sync_opts, local_opts) {
-        logger.debug('updateOptions(sync_opts:%o, local_opts:%o)', sync_opts, local_opts);
-        buzzLog('Update Options');
-
-        state.errorMessage = undefined;
-        state.hijackLinks = sync_opts.hijack_links;
-        state.autoAnswer = sync_opts.auto_answer;
-        state.externalAPIURL = undefined;
-        if (sync_opts.external_api) {
-            state.externalAPIURL = new RegExp(sync_opts.external_api);
-        }
-
-        if (local_opts) {
-            if (local_opts.media_input) {
-                window.chromePhone.setAudioInput(local_opts.media_input);
-            }
-            if (local_opts.media_output) {
-                window.chromePhone.setAudioOutput(local_opts.media_output);
-            }
-            if (local_opts.ring_output) {
-                window.chromePhone.setRingOutput(local_opts.ring_output);
-            }
-            if (local_opts.ring_tone) {
-                window.chromePhone.setRingTone(local_opts.ring_tone, false);
-            }
-        }
-
-        let createSipServers = false;
-        let timeout = 50;
-        if (state.servers.length > 0) {
-            let server = serverFromOptions(sync_opts.sip_1);
-            if (server !== state.servers[0].sip_server ||
-                sync_opts.sip_1.extension !== state.servers[0].sip_extension ||
-                sync_opts.sip_1.password !== state.servers[0].sip_password) {
-                createSipServers = true;
-            }
-            if (!createSipServers) {
-                server = serverFromOptions(sync_opts.sip_2);
-                if (server.length > 0 && state.servers.length === 1) {
-                    createSipServers = true;
-                } else if (server.length === 0 && state.servers.length === 2) {
-                    createSipServers = true;
-                } else if (server.length > 0 && state.servers.length === 2 &&
-                    (server !== state.servers[1].sip_server ||
-                    sync_opts.sip_2.extension !== state.servers[1].sip_extension ||
-                    sync_opts.sip_2.password !== state.servers[1].sip_password)) {
-                    createSipServers = true;
-                }
-            }
-
-            if (createSipServers) {
-                buzzLog('Servers changed, need to shutting down...');
-                logger.debug('servers changing, shutdown 1st');
-                timeout = 2000;
-                window.chromePhone.shutdown();
-            }
-        } else {
-            createSipServers = true;
-        }
-
-        if (createSipServers) {
-            setTimeout(function () {
-                let hasSettings = false;
-                logger.debug('Init Server 1');
-                if (createSipServer('Server 1', sync_opts.sip_1)) {
-                    hasSettings = true;
-                } else {
-                    logger.warn('Server 1 Missing settings');
-                }
-                logger.debug('Init Server 2');
-                if (createSipServer('Server 2', sync_opts.sip_2)) {
-                    hasSettings = true;
-                } else {
-                    logger.debug('Server 2 Missing settings');
-                }
-                if (!hasSettings) {
-                    state.errorMessage = 'Missing settings';
-                    logger.error('Missing settings');
-                    buzzLog('Missing server settings');
-                    return;
-                }
-                logger.debug('auto_login: %s', sync_opts.auto_login);
-                if (sync_opts.auto_login) {
-                    buzzLog('Auto login enabled');
-                    window.chromePhone.login(false);
-                } else {
-                    buzzLog('Auto login disabled');
-                }
-            }, timeout);
-        }
+    function getStatus() {
+        return {
+            status: window.buzzOffscreen.getStatus(),
+            isLoggedIn: window.buzzOffscreen.isLoggedIn(),
+            canLogin: state.servers.length > 0,
+            hasMicAccess: state.micAccess,
+            servers: window.buzzOffscreen.getServers(),
+            phoneNumber: state.phoneNumber,
+            dialedNumber: state.dialedNumber,
+            externalAPI: state.externalAPIPort.length > 0,
+            infoMessage: state.infoMessage,
+            isOnHold: state.hold,
+            isOnMute: state.mute,
+            transferring: state.transferring
+        };
     }
 
     function updateDeviceList() {
+        logger.debug('updateDeviceList()');
         if (state.micAccess) {
-            logger.debug('updateDeviceList()');
             navigator.mediaDevices.enumerateDevices().then(function (devices) {
                 let audioInputs = [];
                 let audioOutputs = [];
@@ -915,18 +920,39 @@ function ChromePhone() {
                 }
                 state.audioInputs = audioInputs;
                 state.audioOutputs = audioOutputs;
-                window.chromePhone.setAudioInput(audioInput);
-                window.chromePhone.setAudioOutput(audioOutput);
-                window.chromePhone.setRingOutput(ringOutput);
+                window.buzzOffscreen.setAudioInput(audioInput);
+                window.buzzOffscreen.setAudioOutput(audioOutput);
+                window.buzzOffscreen.setRingOutput(ringOutput);
+                chrome.runtime.sendMessage({
+                    action: 'update-media',
+                    data: getMedia()
+                }).then();
             });
+        } else {
+            logger.warn('no mic access...');
+            chrome.runtime.sendMessage({
+                action: 'update-media',
+                data: {
+                    hasMicAccess: state.micAccess,
+                }
+            }).then();
+        }
+    }
+
+    function getMedia() {
+        return {
+            hasMicAccess: state.micAccess,
+            audioInputs: state.audioInputs,
+            currentAudioInputId: state.audioInputId,
+            audioOutputs: state.audioOutputs,
+            currentAudioOutputId: state.audioOutputId,
+            currentRingOutputId: state.ringOutputId,
         }
     }
 
     this.login = function (external) {
         logger.debug('login(external:%s)', external);
         state.fromExternal = external;
-        state.errorMessage = undefined;
-        state.infoMessage = undefined;
         for (let srv = 0; srv < state.servers.length; srv++) {
             if (state.servers[srv].connection.jssip && state.servers[srv].connection.jssip.isConnected() && !external) {
                 logger.debug('jssip already connected to %s, stopping 1st ...', state.servers[srv].sip_server);
@@ -934,11 +960,13 @@ function ChromePhone() {
             }
             state.servers[srv].connection.jssip.start();
         }
+        if (state.servers.length === 0) {
+            notifyExternal({action: 'error', error: 'No servers setup'});
+        }
     };
 
     this.logout = function () {
         logger.debug('logout()');
-        state.previouslyLoggedIn = false;
         for (let srv = 0; srv < state.servers.length; srv++) {
             if (state.servers[srv].connection.jssip) {
                 state.servers[srv].connection.jssip.stop();
@@ -959,16 +987,12 @@ function ChromePhone() {
             logger.warn('on a call - ignoring');
             return;
         }
-        addCallLog('Outgoing', phoneNumber, phoneNumber);
         state.fromExternal = external;
         logger.debug('fromExternal - ' + external);
-        state.infoMessage = undefined;
         if (!phoneNumber) {
             logger.warn('No Phone Number');
-            showError('No Phone Number');
-            if (external) {
-                notifyExternal({action: 'error', error: 'No Phone Number'});
-            }
+            updatePopupViewMessage('No Phone Number', true, 3000);
+            notifyExternal({action: 'error', error: 'No Phone Number'});
             return;
         }
         if (state.servers.length === 0) {
@@ -985,14 +1009,14 @@ function ChromePhone() {
                 serverIdx = 0;
             }
         }
-        let srv = state.servers[serverIdx];
+        let server = state.servers[serverIdx];
         logger.debug('using server ' + (serverIdx + 1));
-        if (!srv.connection.loggedIn && state.servers.length > 1) {
+        if (!server.connection.loggedIn && state.servers.length > 1) {
             serverIdx = serverIdx === 1 ? 0 : 1;
             logger.debug('Not logged in, using server ' + (serverIdx + 1));
-            srv = state.servers[serverIdx];
+            server = state.servers[serverIdx];
         }
-        if (external && !srv.connection.loggedIn) {
+        if (external && !server.connection.loggedIn) {
             notifyExternal({action: 'error', error: 'Not Logged In'});
             return;
         }
@@ -1007,7 +1031,7 @@ function ChromePhone() {
             },
             connecting: function (data) {
                 logger.debug('call connecting');
-                srv.connection.status = 'offhook';
+                server.connection.status = 'offhook';
             },
             progress: function (data) {
                 logger.debug('call progress');
@@ -1021,72 +1045,68 @@ function ChromePhone() {
                 if (data.cause === 'SIP Failure Code') {
                     errorMessage += ' - ' + data.message.status_code + ':' + data.message.reason_phrase;
                 }
-                state.infoMessage = undefined;
-                showError(errorMessage);
-                state.call = undefined;
-                srv.connection.status = 'onhook';
-                onhook();
-                notifyExternalOfError();
+                updatePopupViewMessage(errorMessage, true, 5000);
+                onhook(server);
+                notifyExternal({action: 'error', error: errorMessage});
                 storeCallLog();
             },
             ended: function (data) {
                 logger.debug('call ended');
                 tone.boopBoop();
-                state.call = undefined;
-                srv.connection.status = 'onhook';
-                onhook();
+                onhook(server);
                 storeCallLog();
             },
             confirmed: function (data) {
                 logger.debug('call confirmed');
-                srv.connection.status = 'offhook';
                 tone.stopRinging();
                 tone.beep();
-                state.infoMessage = 'On Call to ' + state.dialedNumber;
-                updatePopupViewMessages();
+                updatePopupViewMessage('On Call to ' + state.dialedNumber, false, 0);
                 updateLastCallLogToSuccessful();
             },
             hold: function (data) {
                 logger.debug('hold');
                 state.hold = true;
-                updatePopupHold();
+                updateStatus();
             },
             unhold: function (data) {
                 logger.debug('unhold');
                 state.hold = false;
-                updatePopupHold();
+                if (state.transferring) {
+                    state.transferring = false;
+                }
+                updateStatus();
             },
             muted: function (data) {
                 logger.debug('muted');
                 state.mute = true;
-                updatePopupMute();
+                updateStatus();
             },
             unmuted: function (data) {
                 logger.debug('unmuted');
                 state.mute = false;
-                updatePopupMute();
+                updateStatus();
             },
             getusermediafailed: function (data) {
                 logger.debug('getusermediafailed: %o', data);
-                window.chromePhone.hangup(false);
+                window.buzzOffscreen.hangup(false);
                 checkMicError(data);
             }
         };
-        state.errorMessage = undefined;
         state.dialedNumber = phoneNumber;
         getMicrophone(function (stream) {
-            let options = getConnectionOptions(srv.pcConfig, eventHandlers);
+            let options = getConnectionOptions(server, eventHandlers);
             delete options.mediaConstraints;
             options.mediaStream = stream;
-            let callUri = 'sip:' + state.dialedNumber + '@' + srv.sip_server_host;
-            state.infoMessage = 'Calling ' + state.dialedNumber + ' ...';
+            let callUri = 'sip:' + state.dialedNumber + '@' + server.sip_server_host;
+            updatePopupViewMessage('Calling ' + state.dialedNumber + ' ...', false, 0);
             logger.debug('calling: %s', callUri);
-            state.call = srv.connection.jssip.call(callUri, options);
-            offhook();
+            state.call = server.connection.jssip.call(callUri, options);
+            addCallLog('Outgoing', state.dialedNumber, state.dialedNumber);
+            offhook(server, state.dialedNumber);
         });
     };
 
-    function getConnectionOptions(pcConfig, eventHandlers) {
+    function getConnectionOptions(server, eventHandlers) {
         let opts = {
             mediaConstraints: {
                 audio: true,
@@ -1099,9 +1119,11 @@ function ChromePhone() {
             rtcAnswerConstraints: {
                 offerToReceiveAudio: 1,
                 offerToReceiveVideo: 0
-            },
-            pcConfig: pcConfig
+            }
         };
+        if (typeof server !== 'undefined' && typeof server.pcConfig !== 'undefined') {
+            opts.pcConfig = server.pcConfig;
+        }
         if (state.audioInput) {
             // although the JsSIP definition is boolean it hands it to the browser getUserMedia which
             // has Boolean or MediaTrackConstraints https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamConstraints
@@ -1116,21 +1138,25 @@ function ChromePhone() {
     this.answer = function () {
         if (state.call) {
             tone.stopPlayback();
-            state.call.answer(getConnectionOptions(state.incoming_pcConfig));
-            offhook();
+            state.call.answer(getConnectionOptions(state.incoming_server));
         }
         state.incoming_answer = false;
-        state.incoming_pcConfig = undefined;
+        state.incoming_server = undefined;
     };
 
     this.hangup = function (external) {
         state.fromExternal = external;
         state.incoming_answer = false;
-        state.incoming_pcConfig = undefined;
+        state.incoming_server = undefined;
         if (state.call) {
             state.call.terminate();
+            // fallback to clear some state if the end event not fired...
+            setTimeout(function () {
+                if (state.call) {
+                    onhook(undefined);
+                }
+            }, 150);
         }
-        onhook();
     };
 
     this.mute = function () {
@@ -1202,38 +1228,10 @@ function ChromePhone() {
         return servers;
     }
 
-    this.isMuted = function () {
-        return state.mute;
-    };
-
-    this.isOnHold = function () {
-        return state.hold;
-    };
-
     this.isLoggedIn = function () {
         if (state.servers.length === 0) return false;
         if (state.servers[0].connection.loggedIn) return true;
         return state.servers.length > 1 && state.servers[1].connection.loggedIn;
-    };
-
-    this.canLoggedIn = function () {
-        return state.servers.length > 0;
-    };
-
-    this.getErrorMessage = function () {
-        return state.errorMessage;
-    };
-
-    this.getInfoMessage = function () {
-        return state.infoMessage;
-    };
-
-    this.startDTMF = function (value) {
-        tone.startDTMF(value);
-    };
-
-    this.stopDTMF = function () {
-        tone.stopDTMF();
     };
 
     this.sendDTMF = function (value) {
@@ -1270,14 +1268,6 @@ function ChromePhone() {
         state.audioInput = undefined;
     };
 
-    this.getCurrentAudioInputId = function() {
-        return state.audioInputId;
-    };
-
-    this.getAudioOutputs = function () {
-        return state.audioOutputs;
-    };
-
     this.setAudioOutput = function (deviceId) {
         if (deviceId) {
             state.audioOutputId = deviceId;
@@ -1293,10 +1283,6 @@ function ChromePhone() {
         logger.debug('default audio output');
         state.audioOutput.setSinkId('default');
         tone.audioSinkId = 'default';
-    };
-
-    this.getCurrentAudioOutputId = function() {
-        return state.audioOutputId;
     };
 
     this.setRingOutput = function (deviceId) {
@@ -1317,103 +1303,79 @@ function ChromePhone() {
         tone.ringSinkId = speakers;
     };
 
-    this.hasMicAccess = function () {
-        return state.micAccess;
-    }
-
-    this.connectedToExternalAPI = function () {
-        logger.debug('externalAPIPort length: %i', state.externalAPIPort.length);
-        return state.externalAPIPort.length > 0;
-    };
-
     this.loadSettingsFromExternalAPI = function (optionsDoc) {
-        if (this.connectedToExternalAPI()) {
-            logger.debug('Request settings from CRM');
+        if (state.externalAPIPort.length > 0) {
+            logger.debug('Request settings from external API Port');
             state.optionsDoc = optionsDoc;
             // get the settings from the last connection
             state.externalAPIPort[state.externalAPIPort.length - 1].postMessage({action: 'get-settings'});
         } else {
-            logger.warn('No Sidebar Port, cannot request settings');
+            logger.warn('No external API Port, cannot request settings');
         }
     };
 
-    this.updateSettingsScreen = function (settings) {
-        if (state.optionsDoc) {
-            logger.debug('Got settings from External API');
-
-            function setValue(id, val) {
-                if (val) {
-                    state.optionsDoc.getElementById(id).value = val;
-                } else {
-                    state.optionsDoc.getElementById(id).value = '';
-                }
-            }
-
-            function setServer(id, settings) {
-                setValue('sip_' + id + '_host', settings ? settings.host : '');
-                setValue('sip_' + id + '_port', settings ? settings.port : '');
-                setValue('sip_' + id + '_path', settings ? settings.path : '');
-                setValue('sip_' + id + '_extension', settings ? settings.extension : '');
-                setValue('sip_' + id + '_password', settings ? settings.password : '');
-                setValue('sip_' + id + '_ice', settings ? settings.ice : '');
-            }
-
-            setServer('1', settings.sip_1);
-            setServer('2', settings.sip_2);
-            state.optionsDoc = undefined;
-        } else {
-            logger.warn('options doc was not set');
-        }
-    };
-
-    this.startPlaybackTest = function (ringtone, audioDeviceId, ringDeviceId) {
-        if (!audioDeviceId) audioDeviceId = 'default';
-        testTone.audioSinkId = audioDeviceId;
-        if (!ringDeviceId) ringDeviceId = 'default';
-        testTone.ringSinkId = ringDeviceId;
+    this.startPlaybackTest = function (data) {
+        if (!data.audioDeviceId) data.audioDeviceId = 'default';
+        testTone.audioSinkId = data.audioDeviceId;
+        if (!data.ringDeviceId) data.ringDeviceId = 'default';
+        testTone.ringSinkId = data.ringDeviceId;
         setTimeout(function () {
-            if (ringtone) {
-                testTone.startPlayback();
-            } else {
+            if (data.ringtone === -1) {
                 testTone.startRinging();
+            } else {
+                testTone.setRingTone(data.ringtone, () => testTone.startPlayback());
             }
         }, 100);
     };
 
-    this.stopPlaybackTest = function (ringtone) {
-        if (ringtone) {
-            testTone.stopPlayback();
-        } else {
-            testTone.stopRinging();
-        }
+    this.stopPlaybackTest = function () {
+        testTone.stopPlayback();
+        testTone.stopRinging();
     };
+
+    this.transferring = function (transferring) {
+        if (!this.isOnCall()) return;
+        state.transferring = transferring;
+        if (transferring) {
+            state.previousNumber = state.phoneNumber;
+            state.phoneNumber = '';
+        } else {
+            state.phoneNumber = state.previousNumber;
+            state.previousNumber = undefined;
+        }
+        if (state.transferring && !state.hold) {
+            logger.debug('hold call, starting transfer');
+            this.hold();
+        } else if (!state.transferring && state.hold) {
+            logger.debug('unhold call, cancelling transfer');
+            this.hold();
+        }
+    }
 
     this.transfer = function (number) {
         if (!this.isOnCall()) return;
+        if (!number) {
+            logger.warn('No Phone Number for transfer');
+            updatePopupViewMessage('No Phone Number', true, 3000);
+            return;
+        }
+        state.transferring = false;
         let eventHandlers = {
             requestFailed: function (e) {
                 logger.debug('tx req failed: ' + e.cause);
-                showError(e.cause);
-                if (window.chromePhone.isOnHold()) {
-                    window.chromePhone.hold();
-                }
+                tone.beep();
+                updatePopupViewMessage(e.cause, true, 5000);
             },
             accepted: function (e) {
                 logger.debug('tx accepted');
-                window.chromePhone.hangup(false);
-                state.infoMessage = 'Call transferred';
-                updatePopupViewMessages();
-                setTimeout(function () {
-                    state.infoMessage = undefined;
-                    updatePopupViewMessages();
-                }, 1500);
+                window.buzzOffscreen.hangup(false);
+                updatePopupViewMessage('Call transferred', false, 2000);
             },
             failed: function (e) {
                 logger.debug('tx failed: ' + e.status_line.reason_phrase);
-                showError(e.status_line.reason_phrase);
-                if (window.chromePhone.isOnHold()) {
-                    window.chromePhone.hold();
-                }
+                window.buzzOffscreen.hangup(false);
+                tone.beep();
+                updatePopupViewMessage(e.status_line.reason_phrase, true, 5000);
             },
         };
         state.call.refer(number, {eventHandlers: eventHandlers});
@@ -1421,54 +1383,15 @@ function ChromePhone() {
 
     this.silence = function () {
         tone.stopPlayback();
-        if (state.broadcast) {
-            state.broadcast.postMessage({action: 'hideSilenceButton'});
-        }
     }
 
     this.debugJsSIP = function (on) {
         if (on) {
-            JsSIP.debug.enable('JsSIP:*,ChromePhone');
+            JsSIP.debug.enable('JsSIP:*,BuzzOffscreen');
         } else {
             JsSIP.debug.disable();
-            JsSIP.debug.enable('ChromePhone');
+            JsSIP.debug.enable('BuzzOffscreen');
         }
-    }
-
-    this.popoutWindow = function () {
-        if ('chrome' in window) {
-            let info = {
-                focused: true,
-                width: 220,
-                height: 600,
-                top: 0,
-                left: 0
-            };
-            if (window.screen) {
-                if (window.screen.availWidth > info.width) {
-                    info.left = Math.round((window.screen.availWidth / 2) - (info.width / 2));
-                }
-                if (window.screen.availHeight > info.height) {
-                    info.top = Math.round((window.screen.availHeight / 2) - (info.height / 2));
-                }
-            }
-            if (typeof state.popoutWindowId === 'undefined') {
-                info.url = chrome.extension.getURL('popup.html') + '?type=popout';
-                info.type = 'popup';
-                chrome.windows.create(info, function (win) {
-                    if (win) {
-                        logger.debug('popout created %d', win.id);
-                        state.popoutWindowId = win.id;
-                    }
-                });
-            } else {
-                chrome.windows.update(state.popoutWindowId, info);
-            }
-        }
-    }
-
-    this.getCallLog = function () {
-        return state.callLog;
     }
 
     this.getLastDialedNumber = function () {
@@ -1489,43 +1412,15 @@ function ChromePhone() {
         return [0, 0];
     }
 
-    this.getRingTones = function () {
-        return testTone.getRingTones();
-    }
-
-    this.setRingTone = function (idx, test) {
-        if (test) {
-            testTone.setRingTone(idx);
-        } else {
-            tone.setRingTone(idx);
-        }
-    }
-
     function buzzLog(message) {
-        state.buzzLog.unshift({time: new Date().getTime(), message: message});
-        // limiting the list to 50
-        if (state.buzzLog.length > 50) {
-            state.buzzLog.pop();
-        }
-        if ('chrome' in window) {
-            chrome.storage.local.set({buzz_log: state.buzzLog});
-        }
-    }
-
-    this.getBuzzLog = function () {
-        return state.buzzLog;
+        chrome.runtime.sendMessage({
+            action: 'add-log',
+            data: message
+        }).then();
     }
 
 }
 
-window.chromePhone = new ChromePhone();
-// if a chrome extension
-if ('chrome' in window && chrome.extension) {
-    if (chrome.storage) {
-        chrome.storage.local.get(local_opts, function (local_items) {
-            chrome.storage.sync.get(sync_opts, function (sync_items) {
-                window.chromePhone.init(sync_items, local_items);
-            });
-        });
-    }
-}
+window.buzzOffscreen = new BuzzOffscreen();
+window.buzzOffscreen.init();
+

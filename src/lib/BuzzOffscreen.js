@@ -1205,6 +1205,9 @@ function BuzzOffscreen() {
                     // 1 of the connections is offhook (on an call...)
                     return 'offhook';
                 }
+                if (state.servers[0].connection.status === 'offline') {
+                    return state.servers[1].connection.status;
+                }
             }
             return state.servers[0].connection.status;
         }

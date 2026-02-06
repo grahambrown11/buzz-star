@@ -412,7 +412,7 @@ function populateSelect(select, items, value) {
 
 function levels() {
     if (status === 'offhook') {
-        if (document.getElementById('sliders').style.display === '') {
+        if (document.getElementById('sliders').classList.contains('show')) {
             chrome.runtime.sendMessage({action: 'get-levels'}, (res) => {
                 setMeter('input', res.inputVolume);
                 setMeter('output', res.outputVolume);
@@ -420,8 +420,14 @@ function levels() {
             window.requestAnimationFrame(levels);
         }
     } else {
-        document.querySelector('.meter.input').style.display = 'none';
-        document.querySelector('.meter.output').style.display = 'none';
+        function hide(selector) {
+            const elem = document.querySelector(selector);
+            if (elem && elem.style) {
+                elem.style.display = 'none';
+            }
+        }
+        hide('.meter.input');
+        hide('.meter.output');
     }
 }
 

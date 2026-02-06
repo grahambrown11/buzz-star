@@ -578,36 +578,59 @@ function BuzzOffscreen() {
         }
     }
 
+    function cleanupMeter(type) {
+        if (!state.meter[type]) return;
+        if (state.meter[type].analyser) {
+            state.meter[type].analyser.disconnect();
+            delete state.meter[type].analyser;
+        }
+        if (state.meter[type].dataArray) {
+            delete state.meter[type].dataArray;
+        }
+    }
+
     function createMeter(type, streamSource) {
+        cleanupMeter(type);
+        state.meter[type] = state.meter[type] || {};
         state.meter[type].volume = 0;
         state.meter[type].peak = 0;
         state.meter[type].streamSource = streamSource;
-        state.meter[type].processor = state.audioContext.createScriptProcessor(1024, 2, 2);
-        state.meter[type].processor.onaudioprocess = function (event) {
-            let sum = 0;
-            let buf;
-            buf = event.inputBuffer.getChannelData(0);
-            for (let i = 0; i < buf.length; i++) {
-                sum += buf[i] * buf[i];
+        try {
+            const analyser = state.audioContext.createAnalyser();
+            analyser.fftSize = 256; // Lower fftSize for better performance
+            analyser.smoothingTimeConstant = 0.8;
+            state.meter[type].analyser = analyser;
+            state.meter[type].dataArray = new Uint8Array(analyser.frequencyBinCount);
+            streamSource.connect(analyser);
+            if (type === 'input') {
+                analyser.connect(state.microphone.destination);
+            } else {
+                analyser.connect(state.audioContext.destination);
             }
-            let rms = Math.sqrt(sum / buf.length);
-            // try get it to a percentage, not sure where the 1.4 comes in was from an example...
-            let vol = Math.floor(rms * 100 * 1.4);
-            if (vol > state.meter[type].peak) {
-                state.meter[type].peakTime = window.performance.now();
-                state.meter[type].peak = vol;
-            } else if ((window.performance.now() - state.meter[type].peakTime) > 500) {
-                state.meter[type].peakTime = window.performance.now();
-                state.meter[type].peak = Math.max(vol, (state.meter[type].peak * 0.95));
-            }
-            state.meter[type].volume = vol;
-        };
-        state.meter[type].streamSource.connect(state.meter[type].processor);
-        if (type === 'input') {
-            state.meter[type].processor.connect(state.microphone.destination);
-        } else {
-            state.meter[type].processor.connect(state.audioContext.destination);
+        } catch (error) {
+            logger.error('Error initializing AnalyserNode:', error);
         }
+    }
+
+    function updateMeter(type) {
+        if (!state.meter[type] && !state.meter[type].analyser) return;
+        state.meter[type].analyser.getByteFrequencyData(state.meter[type].dataArray);
+        let sum = 0;
+        let level = 0;
+        for (let i = 0; i < state.meter[type].dataArray.length; i++) {
+            level = state.meter[type].dataArray[i] / 255;
+            sum += level;
+        }
+        let avg = sum / state.meter[type].dataArray.length;
+        const vol = Math.min(100, Math.floor(avg * 100 * 1.4));
+        if (vol > state.meter[type].peak) {
+            state.meter[type].peakTime = performance.now();
+            state.meter[type].peak = vol;
+        } else if ((performance.now() - state.meter[type].peakTime) > 500) {
+            state.meter[type].peakTime = performance.now();
+            state.meter[type].peak = Math.max(0, state.meter[type].peak * 0.95);
+        }
+        state.meter[type].volume = vol;
     }
 
     function updatePopupViewMessage(message, error, timeout) {
@@ -1403,6 +1426,7 @@ function BuzzOffscreen() {
 
     this.getInputVolume = function () {
         if (state.call) {
+            updateMeter('input');
             return [state.meter.input.volume, state.meter.input.peak];
         }
         return [0, 0];
@@ -1410,6 +1434,7 @@ function BuzzOffscreen() {
 
     this.getOutputVolume = function () {
         if (state.call) {
+            updateMeter('output');
             return [state.meter.output.volume, state.meter.output.peak];
         }
         return [0, 0];
@@ -1426,4 +1451,3 @@ function BuzzOffscreen() {
 
 window.buzzOffscreen = new BuzzOffscreen();
 window.buzzOffscreen.init();
-

@@ -7,10 +7,8 @@
   "license": "",
   "main": "lib/ChromePhone.js",
   "scripts": {
-    "dev": "node esbuild.config.js --watch",
     "build": "node esbuild.config.js",
-    "build:prod": "NODE_ENV=production node esbuild.config.js",
-    "zip": "node zip-dist.js"
+    "build:prod": "NODE_ENV=production node esbuild.config.js"
   },
   "dependencies": {
     "@types/chrome": "^0.1.36",

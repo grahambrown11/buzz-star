@@ -3,7 +3,7 @@
   "name": "Buzz* - Phone for Google Chrome™",
   "short_name": "Buzz*",
   "description": "A WebRTC Phone for Asterisk and Google Chrome™",
-  "version": "$$version$$",
+  "version": "__VERSION__",
   "minimum_chrome_version": "109",
   "permissions": [
     "storage",

@@ -1,32 +1,30 @@
 {
   "name": "buzz-star",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "description": "Buzz* a WebRTC Phone for Asterisk and Google Chrome™ / Chromium",
   "author": "Graham Brown",
   "license": "",
   "main": "lib/ChromePhone.js",
+  "scripts": {
+    "dev": "node esbuild.config.js --watch",
+    "build": "node esbuild.config.js",
+    "build:prod": "NODE_ENV=production node esbuild.config.js",
+    "zip": "node zip-dist.js"
+  },
   "dependencies": {
-    "@types/chrome": "^0.0.237",
+    "@types/chrome": "^0.1.36",
     "babel-runtime": "^6.26.0",
-    "classnames": "^2.3.2",
-    "debug": "~4.3.4",
-    "jssip": "^3.10.0"
+    "classnames": "^2.5.1",
+    "debug": "~4.4.3",
+    "jssip": "^3.13.0"
   },
   "devDependencies": {
-    "babel-core": "^6.26.3",
-    "babel-preset-env": "^1.7.0",
-    "babelify": "^10.0.0",
-    "browserify": "^17.0.0",
-    "chokidar": "^3.5.3",
+    "archiver": "^7.0.1",
+    "chokidar": "^5.0.0",
     "del": "^6.1.1",
-    "fancy-log": "^2.0.0",
-    "glob-stream": "^7.0.0",
-    "glob-watcher": "^5.0.5",
-    "gulp": "^4.0.2",
-    "gulp-rename": "^2.0.0",
-    "gulp-replace": "^1.1.4",
-    "gulp-zip": "^5.1.0",
-    "vinyl-source-stream": "^2.0.0"
+    "esbuild": "^0.27.2",
+    "fs-extra": "^11.3.3",
+    "glob": "^10.3.12"
   }
 }

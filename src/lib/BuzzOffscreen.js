@@ -6,7 +6,7 @@ import JsSIP from 'jssip';
 
 function BuzzOffscreen() {
 
-    this.version = "$$version$$";
+    this.version = __VERSION__;
 
     const logger = new Logger("BuzzOffscreen");
     logger.debug('BuzzOffscreen created, ver:' + this.version);

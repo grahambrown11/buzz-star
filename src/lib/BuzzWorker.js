@@ -95,7 +95,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 case 'open-mic-permission':
                     logger.debug('onMessage, request: %o', request);
                     sendAsyncRes = false;
-                    await openMicPermissionPopout();
+                    await openMicPermission();
                     break;
                 case 'show-notification':
                     logger.debug('onMessage, request: %o', request);
@@ -208,16 +208,34 @@ async function loadLocalOptions() {
     }
 }
 
-async function openMicPermissionPopout() {
-    await chrome.windows.create({
+async function openMicPermission() {
+    let ses = await chrome.storage.session.get('mic_permission_id');
+    logger.debug('openMicPermission %o', ses);
+    let micId = undefined;
+    if (ses.mic_permission_id) {
+        micId = parseInt(ses.mic_permission_id);
+    }
+    const info = {
         focused: true,
         width: 500,
-        height: 300,
+        height: 540,
         top: 0,
-        left: 0,
-        type: 'popup',
-        url: chrome.runtime.getURL('microphone.html')
-    });
+        left: 0
+    };
+    if (micId) {
+        logger.debug('updating existing mic permissions window...');
+        await chrome.windows.update(micId, info);
+    } else {
+        logger.debug('creating new mic permissions window...');
+        info.type = 'popup';
+        info.url = chrome.runtime.getURL('microphone.html');
+        await chrome.windows.create(info, async function (win) {
+            if (win) {
+                logger.debug('mic popup created %d', win.id);
+                await chrome.storage.session.set({mic_permission_id: win.id});
+            }
+        });
+    }
 }
 
 async function loadLog() {
@@ -280,13 +298,19 @@ async function popoutWindow() {
 
 chrome.windows.onRemoved.addListener(async (windowId) => {
     logger.debug('window closed %d', windowId);
-    let ses = await chrome.storage.session.get('popout_window_id');
+    let ses = await chrome.storage.session.get(['popout_window_id', 'mic_permission_id']);
     let popoutWindowId = undefined;
+    let micId = undefined;
     if (ses.popout_window_id) {
         popoutWindowId = parseInt(ses.popout_window_id);
     }
+    if (ses.mic_permission_id) {
+        micId = parseInt(ses.mic_permission_id);
+    }
     if (popoutWindowId === windowId) {
         await chrome.storage.session.remove('popout_window_id');
+    } else if (micId === windowId) {
+        await chrome.storage.session.remove('mic_permission_id');
     }
 });
 

@@ -219,7 +219,7 @@ function BuzzOffscreen() {
                                 }).then();
                                 break;
                             default:
-                                logger.warn('unhandled action: %s', msg.action);
+                                logger.debug('unhandled action: %s', msg.action);
                         }
                     }
                 });
@@ -324,7 +324,7 @@ function BuzzOffscreen() {
                 if (createSipServer('Server 1', opts.sync_opts.sip_1)) {
                     hasSettings = true;
                 } else {
-                    logger.warn('Server 1 Missing settings');
+                    logger.debug('Server 1 Missing settings');
                     buzzLog('Server 1 Missing settings');
                 }
                 logger.debug('Init Server 2');
@@ -332,11 +332,10 @@ function BuzzOffscreen() {
                     hasSettings = true;
                 } else {
                     logger.debug('Server 2 Missing settings');
-                    buzzLog('Server 1 Missing settings');
+                    buzzLog('Server 2 Missing settings');
                 }
                 if (!hasSettings) {
-                    logger.error('Missing settings');
-                    buzzLog('Missing server settings');
+                    logger.debug('Missing settings');
                     updatePopupViewMessage('Missing settings', true, 5000);
                     return;
                 }
@@ -375,7 +374,7 @@ function BuzzOffscreen() {
     }
 
     function checkMicError(err) {
-        logger.warn('Error: %s - %s', err.name, err.message);
+        logger.debug('Error: %s - %s', err.name, err.message);
         if (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0) {
             buzzLog('Permission to mic not granted');
             state.micAccess = false;
@@ -608,7 +607,7 @@ function BuzzOffscreen() {
                 analyser.connect(state.audioContext.destination);
             }
         } catch (error) {
-            logger.error('Error initializing AnalyserNode:', error);
+            logger.debug('Error initializing AnalyserNode:', error);
         }
     }
 
@@ -732,7 +731,7 @@ function BuzzOffscreen() {
                 try {
                     state.externalAPIPort[p].postMessage(msg);
                 } catch (err) {
-                    logger.warn("Error posting to external API: %o", err);
+                    logger.debug("Error posting to external API: %o", err);
                 }
             }
         }
@@ -952,7 +951,7 @@ function BuzzOffscreen() {
                 }).then();
             });
         } else {
-            logger.warn('no mic access...');
+            logger.debug('no mic access...');
             chrome.runtime.sendMessage({
                 action: 'update-media',
                 data: {
@@ -1007,19 +1006,19 @@ function BuzzOffscreen() {
     this.callNumber = function (phoneNumber, external, serverIdx) {
         logger.debug('callNumber - ' + phoneNumber);
         if (this.isOnCall()) {
-            logger.warn('on a call - ignoring');
+            logger.debug('on a call - ignoring');
             return;
         }
         state.fromExternal = external;
         logger.debug('fromExternal - ' + external);
         if (!phoneNumber) {
-            logger.warn('No Phone Number');
+            logger.debug('No Phone Number');
             updatePopupViewMessage('No Phone Number', true, 3000);
             notifyExternal({action: 'error', error: 'No Phone Number'});
             return;
         }
         if (state.servers.length === 0) {
-            logger.warn('No servers setup');
+            logger.debug('No servers setup');
             notifyExternal({action: 'error', error: 'No servers setup'});
             return;
         }
@@ -1028,7 +1027,7 @@ function BuzzOffscreen() {
         } else {
             serverIdx = parseInt(serverIdx);
             if (isNaN(serverIdx) || state.servers.length < (serverIdx + 1)) {
-                logger.warn('Requested server not configured, using server 1');
+                logger.debug('Requested server not configured, using server 1');
                 serverIdx = 0;
             }
         }
@@ -1336,7 +1335,7 @@ function BuzzOffscreen() {
             // get the settings from the last connection
             state.externalAPIPort[state.externalAPIPort.length - 1].postMessage({action: 'get-settings'});
         } else {
-            logger.warn('No external API Port, cannot request settings');
+            logger.debug('No external API Port, cannot request settings');
         }
     };
 
@@ -1381,7 +1380,7 @@ function BuzzOffscreen() {
     this.transfer = function (number) {
         if (!this.isOnCall()) return;
         if (!number) {
-            logger.warn('No Phone Number for transfer');
+            logger.debug('No Phone Number for transfer');
             updatePopupViewMessage('No Phone Number', true, 3000);
             return;
         }

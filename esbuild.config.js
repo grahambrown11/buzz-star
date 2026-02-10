@@ -23,7 +23,7 @@ function copyStaticFiles() {
     { from: 'src/fonts/**/*', to: './fonts' },
     { from: 'src/img/**/*', to: './img' },
     { from: 'src/manifest.json', to: './' },
-    { from: 'src/buzz-*.js', to: './' },
+    { from: 'src/*.js', to: './' },
   ];
 
   for (const file of staticFiles) {

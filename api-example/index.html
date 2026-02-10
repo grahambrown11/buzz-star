@@ -42,6 +42,7 @@
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item">
                             <button id="login" type="button" class="btn btn-sm btn-outline-primary m-1">Login</button>
+                            <button id="ping" type="button" class="btn btn-sm btn-outline-primary m-1">Ping</button>
                         </li>
                         <li class="list-group-item">
                             <input id="number" type="text" class="form-control form-control-sm" value="123">
@@ -73,6 +74,7 @@
     </div>
 </div>
 <script>
+    let pingFromButton = false;
     window.buzzApiOptions = {
         callback: buzzCallback,
         loaded: buzzLoaded
@@ -97,8 +99,13 @@
         if (event.action === 'error') {
             showToast(event.error);
         } else if (event.action === 'pong') {
-            setStatus('Connected, version: ' + event.version, false);
-            document.getElementById('actions').style.display = '';
+            if (pingFromButton) {
+                pingFromButton = false;
+                showToast('Pong received');
+            } else {
+                setStatus('Connected, version: ' + event.version, false);
+                document.getElementById('actions').style.display = '';
+            }
         } else if (event.action === 'incoming-call') {
             let toast = '';
             if (document.getElementById('auto_answer').checked) {
@@ -132,6 +139,11 @@
     document.getElementById('login').addEventListener('click', function (e) {
         window.buzzApi.login();
         showToast('Login requested');
+    });
+    document.getElementById('ping').addEventListener('click', function (e) {
+        pingFromButton = true;
+        window.buzzApi.ping();
+        showToast('Ping sent');
     });
     document.getElementById('dial').addEventListener('click', function (e) {
         const num = document.getElementById('number').value.replace(/[^\d\*\#]/g, '');

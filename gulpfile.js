@@ -42,7 +42,7 @@ function compileJS(src, dst) {
         .transform(babelify.configure({
             "presets": [
                 [
-                    "env",
+                    "@babel/preset-env",
                     {
                         "targets": {
                             "chrome": "109"

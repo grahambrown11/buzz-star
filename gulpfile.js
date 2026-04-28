@@ -6,14 +6,14 @@ const source = require('vinyl-source-stream');
 const browserify = require('browserify');
 const babelify = require("babelify");
 const del = require('del');
-const zip = require('gulp-zip');
+const zip = require('gulp-zip').default;
 const replace = require('gulp-replace');
 const pkg = require('./package.json');
 
 const OUTPUT_DIR = 'buzz-star';
 let debug = true;
 
-gulp.task('clean', () => del(OUTPUT_DIR, {force: true}));
+gulp.task('clean', () => del([OUTPUT_DIR, 'buzz-star.zip'], {force: true}));
 
 gulp.task('copy', gulp.series('clean', () => {
     return gulp.src([
@@ -22,7 +22,7 @@ gulp.task('copy', gulp.series('clean', () => {
         'src/css/**',
         'src/fonts/**',
         'src/img/**'
-    ], {'base': 'src'})
+    ], {'base': 'src', 'encoding': false})
         .pipe(gulp.dest(OUTPUT_DIR));
 }));
 
@@ -79,7 +79,7 @@ gulp.task('debug-off', (cb) => {
 });
 
 gulp.task('zip', gulp.series('bundle', () => {
-    return gulp.src(OUTPUT_DIR + '/**', {dot: true})
+    return gulp.src(OUTPUT_DIR + '/**', {dot: true, encoding: false})
     .pipe(zip('buzz-star.zip'))
     .pipe(gulp.dest("."));
 }));

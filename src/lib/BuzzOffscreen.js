@@ -79,6 +79,11 @@ function BuzzOffscreen() {
                         checkMic(true);
                         sendResponse(true);
                         break;
+                    case 'mic-error':
+                        logger.debug('onMessage, request: %o', request);
+                        checkMicError(request.error);
+                        sendResponse(true);
+                        break;
                     case 'ping':
                         logger.debug('onMessage, request: %o', request);
                         sendResponse({
@@ -374,11 +379,22 @@ function BuzzOffscreen() {
     }
 
     function checkMicError(err) {
-        logger.debug('Error: %s - %s', err.name, err.message);
-        if (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0) {
+        logger.warn('Error: %s - %s', err.name, err.message);
+        if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            const msg = 'No audio input device found';
+            buzzLog(msg);
+            state.micAccess = false;
+            showError(msg);
+            notifyExternal({action: 'error', error: msg});
+        } else if (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0) {
             buzzLog('Permission to mic not granted');
             state.micAccess = false;
             chrome.runtime.sendMessage({action: 'open-mic-permission'}).then();
+        } else {
+            const msg = 'Microphone error: ' + err.name;
+            buzzLog(msg);
+            showError(msg);
+            notifyExternal({action: 'error', error: msg});
         }
     }
 

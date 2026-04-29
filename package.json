@@ -15,7 +15,7 @@
     "babel-runtime": "^6.26.0",
     "classnames": "^2.5.1",
     "debug": "~4.4.3",
-    "jssip": "^3.13.0"
+    "jssip": "^3.13.7"
   },
   "devDependencies": {
     "archiver": "^7.0.1",

@@ -285,7 +285,7 @@ function formatDate(timestamp, short) {
 }
 
 function uiRenderCallLog() {
-    if (document.getElementById('list').style.display === '') {
+    if (document.getElementById('list').classList.contains('show')) {
         chrome.runtime.sendMessage({action: 'get-call-log'}, (callLog) => {
             logger.debug('call log: %o', callLog);
             if (callLog.length === 0) {
@@ -360,18 +360,20 @@ function updateServerStatus(svr, server) {
 }
 
 function uiRenderBuzzLog() {
-    chrome.runtime.sendMessage({action: 'get-log'}, (buzzLog) => {
-        logger.debug('BuzzLog: %o', buzzLog);
-        let log = '';
-        for (let i = 0; i < buzzLog.length; i++) {
-            log += formatDate(buzzLog[i].time, false) + ' - ' + buzzLog[i].message + '\n';
-        }
-        document.getElementById('buzz-log').innerHTML = log;
-    });
+    if (document.getElementById('status').classList.contains('show')) {
+        chrome.runtime.sendMessage({action: 'get-log'}, (buzzLog) => {
+            logger.debug('BuzzLog: %o', buzzLog);
+            let log = '';
+            for (let i = 0; i < buzzLog.length; i++) {
+                log += formatDate(buzzLog[i].time, false) + ' - ' + buzzLog[i].message + '\n';
+            }
+            document.getElementById('buzz-log').innerHTML = log;
+        });
+    }
 }
 
 function renderSliders(data) {
-    if (document.getElementById('sliders').style.display === '') {
+    if (document.getElementById('sliders').classList.contains('show')) {
         function changeMedia() {
             chrome.runtime.sendMessage({
                 action: 'set-media',
@@ -380,20 +382,42 @@ function renderSliders(data) {
             }).then();
         }
         const template = document.getElementById('sliders-template').content.firstElementChild.cloneNode(true);
-        let mediaInputSelect = template.querySelector('#media_input');
-        populateSelect(mediaInputSelect, data.audioInputs, data.currentAudioInputId);
-        mediaInputSelect.addEventListener('change', function() {
-            logger.debug('input change %s', this.value);
-            changeMedia();
-        });
-        let mediaOutputSelect = template.querySelector('#media_output');
-        populateSelect(mediaOutputSelect, data.audioOutputs, data.currentAudioOutputId);
-        mediaOutputSelect.addEventListener('change', function() {
-            logger.debug('output change %s', this.value);
-            changeMedia();
-        });
+        const hasInputs = data.audioInputs && data.audioInputs.length > 0;
+        if (hasInputs) {
+            console.log('has inputs');
+            let mediaInputSelect = template.querySelector('#media_input');
+            populateSelect(mediaInputSelect, data.audioInputs, data.currentAudioInputId);
+            mediaInputSelect.addEventListener('change', function() {
+                logger.debug('input change %s', this.value);
+                changeMedia();
+            });
+        } else {
+            console.log('no inputs');
+            template.querySelector('#media-input-section').style.display = 'none';
+            template.querySelector('#media-input-meter').style.display = 'none';
+        }
+        const hasOutputs = data.audioOutputs && data.audioOutputs.length > 0;
+        if (hasOutputs) {
+            console.log('has outputs');
+            let mediaOutputSelect = template.querySelector('#media_output');
+            populateSelect(mediaOutputSelect, data.audioOutputs, data.currentAudioOutputId);
+            mediaOutputSelect.addEventListener('change', function() {
+                logger.debug('output change %s', this.value);
+                changeMedia();
+            });
+        } else {
+            console.log('no outputs');
+            template.querySelector('#media-output-section').style.display = hasOutputs ? '' : 'none';
+            template.querySelector('#media-output-meter').style.display = hasOutputs ? '' : 'none';
+        }
+        const noMedia = !hasInputs && !hasOutputs;
+        if (noMedia) {
+            console.log('no media');
+            template.querySelector('#no-media-msg').style.display = '';
+        } else {
+            window.requestAnimationFrame(levels);
+        }
         document.getElementById('sliders').appendChild(template);
-        window.requestAnimationFrame(levels);
     }
 }
 
@@ -498,6 +522,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     chrome.runtime.sendMessage({action: 'get-media'}, (res) => {
                         renderSliders(res);
                     });
+                } else if (this.dataset.tab === 'status') {
+                    uiRenderBuzzLog();
                 }
             }
             this.className += ' w3-border-black';

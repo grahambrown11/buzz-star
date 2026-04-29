@@ -332,22 +332,27 @@
 </template>
 <template id="sliders-template">
     <div class="w3-row">
-        <div class="w3-col s12">
+        <div id="no-media-msg" class="w3-col s12" style="display: none;">
+            <div class="w3-panel w3-pale-red w3-leftbar w3-border-red">
+                <i class="fa fa-exclamation-triangle"></i> No audio devices found
+            </div>
+        </div>
+        <div id="media-input-section" class="w3-col s12">
             <label for="media_input"><i class="fa fa-microphone"></i> Media Input:</label>
             <select id="media_input" class="w3-select w3-grey"></select>
         </div>
-        <div class="w3-col s12">
+        <div id="media-input-meter" class="w3-col s12">
             <div class="meter input">
                 <div class="bar"></div>
                 <div class="overlay"></div>
                 <div class="peak"></div>
             </div>
         </div>
-        <div class="w3-col s12">
+        <div id="media-output-section" class="w3-col s12">
             <label for="media_output"><i class="fa fa-volume-up"></i> Media Output:</label>
             <select id="media_output" class="w3-select w3-grey"></select>
         </div>
-        <div class="w3-col s12">
+        <div id="media-output-meter" class="w3-col s12">
             <div class="meter output">
                 <div class="bar"></div>
                 <div class="overlay"></div>

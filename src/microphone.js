@@ -7,4 +7,10 @@ navigator.getUserMedia({audio: true}, function(stream) {
     });
 }, function(err) {
     console.log('error: '+ err.name);
+    chrome.runtime.sendMessage({
+        action: 'mic-error',
+        error: {name: err.name, message: err.message}
+    }).then(() => {
+        window.close();
+    });
 });

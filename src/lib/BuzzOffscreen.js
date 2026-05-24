@@ -136,6 +136,7 @@ function BuzzOffscreen() {
                         window.buzzOffscreen.updateOptions(request.data);
                         break;
                     case 'set-number':
+                    case 'set-number-for-content':
                         logger.debug('onMessage, request: %o', request);
                         window.buzzOffscreen.setPhoneNumber(request.data);
                         break;
@@ -252,7 +253,7 @@ function BuzzOffscreen() {
         state.audioOutput.load();
 
         (async () => {
-            const opts = await chrome.runtime.sendMessage({action: 'get-options'});
+            const opts = await chrome.runtime.sendMessage({ action: 'get-options' });
             window.buzzOffscreen.updateOptions(opts);
             // listen for media device changes
             navigator.mediaDevices.ondevicechange = function () {
@@ -261,7 +262,7 @@ function BuzzOffscreen() {
             };
             checkMic(false);
             if (opts.sync_opts.start_popout) {
-                await chrome.runtime.sendMessage({action: 'popout-window'});
+                await chrome.runtime.sendMessage({ action: 'popout-window' });
             }
         })();
     };
@@ -363,7 +364,7 @@ function BuzzOffscreen() {
     function checkMic(fromPopup) {
         // check we have access to the microphone
         logger.debug('Checking Access to mic...');
-        navigator.getUserMedia({audio: true}, function (stream) {
+        navigator.getUserMedia({ audio: true }, function (stream) {
             logger.debug('... have access to mic');
             state.micAccess = true;
             stream.getAudioTracks()[0].stop();
@@ -385,16 +386,16 @@ function BuzzOffscreen() {
             buzzLog(msg);
             state.micAccess = false;
             showError(msg);
-            notifyExternal({action: 'error', error: msg});
+            notifyExternal({ action: 'error', error: msg });
         } else if (err.name === 'NotAllowedError' || err.name.toLowerCase().indexOf('media') >= 0) {
             buzzLog('Permission to mic not granted');
             state.micAccess = false;
-            chrome.runtime.sendMessage({action: 'open-mic-permission'}).then();
+            chrome.runtime.sendMessage({ action: 'open-mic-permission' }).then();
         } else {
             const msg = 'Microphone error: ' + err.name;
             buzzLog(msg);
             showError(msg);
-            notifyExternal({action: 'error', error: msg});
+            notifyExternal({ action: 'error', error: msg });
         }
     }
 
@@ -406,7 +407,7 @@ function BuzzOffscreen() {
             audio: true
         }
         if (state.audioInput) {
-            constraints.audio = {deviceId: {exact: state.audioInput}};
+            constraints.audio = { deviceId: { exact: state.audioInput } };
         }
         if (state.microphone.source) {
             state.microphone.source.mediaStream.getAudioTracks()[0].stop();
@@ -555,7 +556,7 @@ function BuzzOffscreen() {
                         }
                     }, 2000);
                 }
-                chrome.runtime.sendMessage({action: 'is-idle'}, (res) => {
+                chrome.runtime.sendMessage({ action: 'is-idle' }, (res) => {
                     if (!res) {
                         logger.debug('Not Idle or No Idle Permission, Auto Answer in 2 sec');
                         autoAnswerCall();
@@ -678,7 +679,7 @@ function BuzzOffscreen() {
                 title: title,
                 message: message || '',
                 iconUrl: 'img/icon-blue-128.png',
-                buttons: showAnswerButtons ? [{title: 'Answer'}, {title: 'Reject'}] : [],
+                buttons: showAnswerButtons ? [{ title: 'Answer' }, { title: 'Reject' }] : [],
                 requireInteraction: showAnswerButtons
             }
         }).then();
@@ -698,7 +699,7 @@ function BuzzOffscreen() {
         }
         updateStatus();
         updatePopupViewMessage(undefined, false, 0);
-        sendExternal({action: 'call-ended'});
+        sendExternal({ action: 'call-ended' });
         if (state.microphone.source) {
             if (state.microphone.source.mediaStream) {
                 state.microphone.source.mediaStream.getAudioTracks()[0].stop();
@@ -833,7 +834,7 @@ function BuzzOffscreen() {
         if (options.ice) {
             let servers = options.ice.split(',');
             for (let i = 0; i < servers.length; i++) {
-                cnf.pcConfig.iceServers.push({urls: [servers[i]]});
+                cnf.pcConfig.iceServers.push({ urls: [servers[i]] });
             }
         }
         cnf.connection.socket = new JsSIP.WebSocketInterface(cnf.sip_server);
@@ -999,7 +1000,7 @@ function BuzzOffscreen() {
             state.servers[srv].connection.jssip.start();
         }
         if (state.servers.length === 0) {
-            notifyExternal({action: 'error', error: 'No servers setup'});
+            notifyExternal({ action: 'error', error: 'No servers setup' });
         }
     };
 
@@ -1030,12 +1031,12 @@ function BuzzOffscreen() {
         if (!phoneNumber) {
             logger.debug('No Phone Number');
             updatePopupViewMessage('No Phone Number', true, 3000);
-            notifyExternal({action: 'error', error: 'No Phone Number'});
+            notifyExternal({ action: 'error', error: 'No Phone Number' });
             return;
         }
         if (state.servers.length === 0) {
             logger.debug('No servers setup');
-            notifyExternal({action: 'error', error: 'No servers setup'});
+            notifyExternal({ action: 'error', error: 'No servers setup' });
             return;
         }
         if (typeof serverIdx === 'undefined') {
@@ -1055,7 +1056,7 @@ function BuzzOffscreen() {
             server = state.servers[serverIdx];
         }
         if (external && !server.connection.loggedIn) {
-            notifyExternal({action: 'error', error: 'Not Logged In'});
+            notifyExternal({ action: 'error', error: 'Not Logged In' });
             return;
         }
         // call events
@@ -1085,7 +1086,7 @@ function BuzzOffscreen() {
                 }
                 updatePopupViewMessage(errorMessage, true, 5000);
                 onhook(server);
-                notifyExternal({action: 'error', error: errorMessage});
+                notifyExternal({ action: 'error', error: errorMessage });
                 storeCallLog();
             },
             ended: function (data) {
@@ -1165,7 +1166,7 @@ function BuzzOffscreen() {
         if (state.audioInput) {
             // although the JsSIP definition is boolean it hands it to the browser getUserMedia which
             // has Boolean or MediaTrackConstraints https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamConstraints
-            opts.mediaConstraints.audio = {deviceId: {exact: state.audioInput}};
+            opts.mediaConstraints.audio = { deviceId: { exact: state.audioInput } };
         }
         if (eventHandlers) {
             opts.eventHandlers = eventHandlers;
@@ -1254,7 +1255,7 @@ function BuzzOffscreen() {
 
     this.getServers = function () {
         let servers = [];
-        for (let i=0; i < state.servers.length; i++) {
+        for (let i = 0; i < state.servers.length; i++) {
             let serverStatus = {
                 server: state.servers[i].sip_server,
                 connection: 'offline',
@@ -1349,7 +1350,7 @@ function BuzzOffscreen() {
             logger.debug('Request settings from external API Port');
             state.optionsDoc = optionsDoc;
             // get the settings from the last connection
-            state.externalAPIPort[state.externalAPIPort.length - 1].postMessage({action: 'get-settings'});
+            state.externalAPIPort[state.externalAPIPort.length - 1].postMessage({ action: 'get-settings' });
         } else {
             logger.debug('No external API Port, cannot request settings');
         }
@@ -1419,7 +1420,7 @@ function BuzzOffscreen() {
                 updatePopupViewMessage(e.status_line.reason_phrase, true, 5000);
             },
         };
-        state.call.refer(number, {eventHandlers: eventHandlers});
+        state.call.refer(number, { eventHandlers: eventHandlers });
     }
 
     this.silence = function () {

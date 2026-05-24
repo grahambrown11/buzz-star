@@ -33,6 +33,7 @@ chrome.runtime.onMessage.addListener((request, sender) => {
                 }
                 break;
             case 'set-number':
+            case 'set-number-for-content':
                 logger.debug('set number - %o', request.data);
                 document.getElementById('number').value = request.data;
                 break;
@@ -131,11 +132,11 @@ function uiUpdateStatus(data) {
         if (data.servers.length > 1) {
             updateServerStatus('svr2', data.servers[1]);
         } else {
-            updateServerStatus('svr2', {connection: 'not configured'});
+            updateServerStatus('svr2', { connection: 'not configured' });
         }
     } else {
-        updateServerStatus('svr1', {connection: 'not configured'});
-        updateServerStatus('svr2', {connection: 'not configured'});
+        updateServerStatus('svr1', { connection: 'not configured' });
+        updateServerStatus('svr2', { connection: 'not configured' });
     }
     if (data.infoMessage) {
         uiUpdateMessage({
@@ -286,7 +287,7 @@ function formatDate(timestamp, short) {
 
 function uiRenderCallLog() {
     if (document.getElementById('list').classList.contains('show')) {
-        chrome.runtime.sendMessage({action: 'get-call-log'}, (callLog) => {
+        chrome.runtime.sendMessage({ action: 'get-call-log' }, (callLog) => {
             logger.debug('call log: %o', callLog);
             if (callLog.length === 0) {
                 document.getElementById('list').innerHTML = '<div>No call records</div>';
@@ -322,7 +323,7 @@ function uiRenderCallLog() {
                     icon.title = title;
                     record.querySelector('.call-date').innerText = formatDate(timestamp, true);
                     record.querySelector('.call-display').innerText = display;
-                    record.addEventListener('click', function() {
+                    record.addEventListener('click', function () {
                         if (status === 'onhook') {
                             document.querySelector('.tablink[data-tab="phone"]').dispatchEvent(new MouseEvent('click'));
                             let e = document.getElementById('number');
@@ -361,7 +362,7 @@ function updateServerStatus(svr, server) {
 
 function uiRenderBuzzLog() {
     if (document.getElementById('status').classList.contains('show')) {
-        chrome.runtime.sendMessage({action: 'get-log'}, (buzzLog) => {
+        chrome.runtime.sendMessage({ action: 'get-log' }, (buzzLog) => {
             logger.debug('BuzzLog: %o', buzzLog);
             let log = '';
             for (let i = 0; i < buzzLog.length; i++) {
@@ -387,7 +388,7 @@ function renderSliders(data) {
             console.log('has inputs');
             let mediaInputSelect = template.querySelector('#media_input');
             populateSelect(mediaInputSelect, data.audioInputs, data.currentAudioInputId);
-            mediaInputSelect.addEventListener('change', function() {
+            mediaInputSelect.addEventListener('change', function () {
                 logger.debug('input change %s', this.value);
                 changeMedia();
             });
@@ -401,7 +402,7 @@ function renderSliders(data) {
             console.log('has outputs');
             let mediaOutputSelect = template.querySelector('#media_output');
             populateSelect(mediaOutputSelect, data.audioOutputs, data.currentAudioOutputId);
-            mediaOutputSelect.addEventListener('change', function() {
+            mediaOutputSelect.addEventListener('change', function () {
                 logger.debug('output change %s', this.value);
                 changeMedia();
             });
@@ -437,7 +438,7 @@ function populateSelect(select, items, value) {
 function levels() {
     if (status === 'offhook') {
         if (document.getElementById('sliders').classList.contains('show')) {
-            chrome.runtime.sendMessage({action: 'get-levels'}, (res) => {
+            chrome.runtime.sendMessage({ action: 'get-levels' }, (res) => {
                 setMeter('input', res.inputVolume);
                 setMeter('output', res.outputVolume);
             });
@@ -493,7 +494,7 @@ function setPhoneNumber(value) {
     return value;
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
 
     let i;
     logger.debug('Popup loaded, url=%s', window.location.href);
@@ -501,14 +502,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.location.href.indexOf('type=popout') !== -1) {
         document.getElementById('popout').style.display = 'none';
     } else {
-        document.getElementById('popout').addEventListener('click', function() {
-            chrome.runtime.sendMessage({action: 'popout-window'}).then();
+        document.getElementById('popout').addEventListener('click', function () {
+            chrome.runtime.sendMessage({ action: 'popout-window' }).then();
         });
     }
 
     let tabLinks = document.querySelectorAll('.tablink');
-    for (i=0; i < tabLinks.length; i++) {
-        tabLinks[i].addEventListener('click', function() {
+    for (i = 0; i < tabLinks.length; i++) {
+        tabLinks[i].addEventListener('click', function () {
             let tab = document.querySelector('.tab.show');
             if (tab) {
                 tab.className = tab.className.replace(' show', '');
@@ -525,7 +526,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (this.dataset.tab === 'list') {
                     uiRenderCallLog();
                 } else if (this.dataset.tab === 'sliders') {
-                    chrome.runtime.sendMessage({action: 'get-media'}, (res) => {
+                    chrome.runtime.sendMessage({ action: 'get-media' }, (res) => {
                         renderSliders(res);
                     });
                 } else if (this.dataset.tab === 'status') {
@@ -535,20 +536,20 @@ document.addEventListener('DOMContentLoaded', function() {
             this.className += ' w3-border-black';
         });
     }
-    chrome.runtime.sendMessage({action: 'get-status'}, (res) => {
+    chrome.runtime.sendMessage({ action: 'get-status' }, (res) => {
         uiUpdateStatus(res);
     });
-    chrome.runtime.sendMessage({action: 'get-media'}, (res) => {
+    chrome.runtime.sendMessage({ action: 'get-media' }, (res) => {
         uiUpdateMedia(res);
     });
     uiRenderBuzzLog();
 
     let keys = document.querySelectorAll('.num-pad .key');
-    for (let i=0; i < keys.length; i++) {
-        keys[i].addEventListener('mousedown', function() {
+    for (let i = 0; i < keys.length; i++) {
+        keys[i].addEventListener('mousedown', function () {
             dtmf.startDTMF(this.dataset.value);
         });
-        keys[i].addEventListener('mouseup', function() {
+        keys[i].addEventListener('mouseup', function () {
             dtmf.stopDTMF();
             if (status === 'offhook' && document.getElementById('tx').dataset.action === 'tx') {
                 chrome.runtime.sendMessage({
@@ -562,75 +563,75 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    document.getElementById('mic-access').addEventListener('click', function() {
-        chrome.runtime.sendMessage({action: 'open-mic-permission'}).then();
+    document.getElementById('mic-access').addEventListener('click', function () {
+        chrome.runtime.sendMessage({ action: 'open-mic-permission' }).then();
     });
 
-    document.getElementById('number').addEventListener('keyup', function() {
+    document.getElementById('number').addEventListener('keyup', function () {
         this.value = setPhoneNumber(this.value);
     });
 
-    document.getElementById('number').addEventListener('paste', function() {
+    document.getElementById('number').addEventListener('paste', function () {
         this.value = setPhoneNumber(this.value);
     });
 
-    document.getElementById('number-clear').addEventListener('click', function() {
+    document.getElementById('number-clear').addEventListener('click', function () {
         document.getElementById('number').value = '';
         setPhoneNumber('');
     });
 
-    document.getElementById('dial').addEventListener('click', function() {
+    document.getElementById('dial').addEventListener('click', function () {
         call(this);
     });
 
-    document.getElementById('hangup').addEventListener('click', function() {
-        chrome.runtime.sendMessage({action: 'hangup'}).then();
+    document.getElementById('hangup').addEventListener('click', function () {
+        chrome.runtime.sendMessage({ action: 'hangup' }).then();
         uiOnHangup();
     });
 
-    document.getElementById('silence').addEventListener('click', function() {
+    document.getElementById('silence').addEventListener('click', function () {
         this.style.display = 'none';
-        chrome.runtime.sendMessage({action: 'silence'}).then();
+        chrome.runtime.sendMessage({ action: 'silence' }).then();
     });
 
-    document.getElementById('mute').addEventListener('click', function() {
+    document.getElementById('mute').addEventListener('click', function () {
         this.querySelector('i').className = '';
-        chrome.runtime.sendMessage({action: 'mute'}).then();
+        chrome.runtime.sendMessage({ action: 'mute' }).then();
     });
 
-    document.getElementById('hold').addEventListener('click', function() {
+    document.getElementById('hold').addEventListener('click', function () {
         this.querySelector('i').className = '';
-        chrome.runtime.sendMessage({action: 'hold'}).then();
+        chrome.runtime.sendMessage({ action: 'hold' }).then();
     });
 
-    document.getElementById('tx').addEventListener('click', function() {
+    document.getElementById('tx').addEventListener('click', function () {
         uiToggleTransfer();
     });
 
-    document.getElementById('transfer').addEventListener('click', function() {
+    document.getElementById('transfer').addEventListener('click', function () {
         transfer();
     });
 
-    document.getElementById('settings').addEventListener('click', function() {
+    document.getElementById('settings').addEventListener('click', function () {
         chrome.runtime.openOptionsPage();
     });
 
-    document.getElementById('login1').addEventListener('click', function() {
+    document.getElementById('login1').addEventListener('click', function () {
         this.style.display = 'none';
-        chrome.runtime.sendMessage({action: 'login'}).then();
+        chrome.runtime.sendMessage({ action: 'login' }).then();
     });
 
-    document.getElementById('login2').addEventListener('click', function() {
+    document.getElementById('login2').addEventListener('click', function () {
         this.style.display = 'none';
-        chrome.runtime.sendMessage({action: 'login'}).then();
+        chrome.runtime.sendMessage({ action: 'login' }).then();
     });
 
-    document.getElementById('logout').addEventListener('click', function() {
+    document.getElementById('logout').addEventListener('click', function () {
         this.style.display = 'none';
-        chrome.runtime.sendMessage({action: 'logout'}).then();
+        chrome.runtime.sendMessage({ action: 'logout' }).then();
     });
 
-    document.addEventListener('keyup', function(e) {
+    document.addEventListener('keyup', function (e) {
         if (e.key === 'Enter') {
             if (status === 'offhook') {
                 if (document.getElementById('transfer').style.display === '') {
@@ -644,10 +645,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function call(btn) {
         if (status === 'ringing') {
-            chrome.runtime.sendMessage({action: 'answer'}).then();
+            chrome.runtime.sendMessage({ action: 'answer' }).then();
         } else {
             if (!document.getElementById('number').value) {
-                chrome.runtime.sendMessage({action: 'get-last-dialed-number'}, (res) => {
+                chrome.runtime.sendMessage({ action: 'get-last-dialed-number' }, (res) => {
                     let e = document.getElementById('number');
                     e.value = res;
                     e.dispatchEvent(new KeyboardEvent('keyup'));

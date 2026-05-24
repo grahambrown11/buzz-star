@@ -101,6 +101,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     logger.debug('onMessage, request: %o', request);
                     await showNotification(request.data);
                     break;
+                case 'set-number-for-content':
+                    logger.debug('onMessage, request: %o', request);
+                    await showBuzz();
+                    break;
                 default:
                     sendAsyncRes = false;
             }
@@ -114,9 +118,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 chrome.notifications.onButtonClicked.addListener(function (id, button) {
     logger.debug('notification ' + id + ' button ' + button + ' clicked');
     if (button === 0) {
-        chrome.runtime.sendMessage({action: 'answer'}).then();
+        chrome.runtime.sendMessage({ action: 'answer' }).then();
     } else {
-        chrome.runtime.sendMessage({action: 'hangup'}).then();
+        chrome.runtime.sendMessage({ action: 'hangup' }).then();
     }
 });
 
@@ -232,7 +236,7 @@ async function openMicPermission() {
         await chrome.windows.create(info, async function (win) {
             if (win) {
                 logger.debug('mic popup created %d', win.id);
-                await chrome.storage.session.set({mic_permission_id: win.id});
+                await chrome.storage.session.set({ mic_permission_id: win.id });
             }
         });
     }
@@ -251,12 +255,21 @@ async function loadLog() {
 
 async function addLog(message) {
     await loadLog();
-    cache.buzzLog.unshift({time: new Date().getTime(), message: message});
+    cache.buzzLog.unshift({ time: new Date().getTime(), message: message });
     // limiting the list to 50
     if (cache.buzzLog.length > 50) {
         cache.buzzLog.pop();
     }
-    await chrome.storage.local.set({buzz_log: cache.buzzLog});
+    await chrome.storage.local.set({ buzz_log: cache.buzzLog });
+}
+
+async function showBuzz() {
+    logger.debug('Opening extension popup');
+    try {
+        await chrome.action.openPopup();
+    } catch (e) {
+        logger.error('Failed to open popup: %o', e);
+    }
 }
 
 async function popoutWindow() {
@@ -290,7 +303,7 @@ async function popoutWindow() {
         chrome.windows.create(info, async function (win) {
             if (win) {
                 logger.debug('popout created %d', win.id);
-                await chrome.storage.session.set({popout_window_id: win.id});
+                await chrome.storage.session.set({ popout_window_id: win.id });
             }
         });
     }
@@ -332,7 +345,7 @@ async function updateStatus(status) {
         icons = getIcons('green');
     }
     logger.debug('set icon: %o', icons);
-    await chrome.action.setIcon({path: icons});
+    await chrome.action.setIcon({ path: icons });
     if (status !== 'ringing') {
         await clearNotification();
     }
@@ -356,10 +369,10 @@ async function addCallLog(data) {
     if (cache.callLog.length > 20) {
         cache.callLog.pop();
     }
-    await chrome.storage.local.set({call_log: cache.callLog});
+    await chrome.storage.local.set({ call_log: cache.callLog });
     if (data.type === 'Outgoing') {
         cache.lastDialedNumber = data.number;
-        await chrome.storage.local.set({last_dialed_number: data.lastDialedNumber});
+        await chrome.storage.local.set({ last_dialed_number: data.lastDialedNumber });
     }
 }
 
@@ -375,7 +388,7 @@ async function loadLastDialedNumber() {
 }
 
 async function isIdle() {
-    const hasIdleAccess = await chrome.permissions.contains({permissions: ['idle']});
+    const hasIdleAccess = await chrome.permissions.contains({ permissions: ['idle'] });
     logger.debug('IdleState Permission: %o', hasIdleAccess);
     if (hasIdleAccess) {
         // if idle for more than 15 minutes
@@ -390,7 +403,7 @@ async function isIdle() {
 async function showNotification(data) {
     let stored = await chrome.storage.session.get('notification_id');
     await chrome.notifications.create(stored.notification_id, data, async function (id) {
-        await chrome.storage.session.set({notification_id: id});
+        await chrome.storage.session.set({ notification_id: id });
     });
 }
 

@@ -3,13 +3,12 @@
 (() => {
 
     let api_allowed = false;
-    let tel_links = false;
     /** @type chrome.runtime.Port */
     let port = undefined;
 
     console.log('Buzz* Content Script');
 
-    chrome.runtime.sendMessage({action: 'inject'}, (response) => {
+    chrome.runtime.sendMessage({ action: 'inject' }, (response) => {
         console.log('res:', response);
         if (response.api_allowed) {
             console.log('Allow External BuzzAPI');
@@ -23,7 +22,21 @@
             }
         }
         if (response.tel_links) {
-            tel_links = true;
+            // Use event delegation to handle clicks on tel: links dynamically
+            document.addEventListener('click', (event) => {
+                // Resolve target or parent element that is a tel: link
+                const link = event.target.closest('a[href^="tel:"]');
+                if (link) {
+                    const phoneNumber = link.href.substring(4).replace(/\D/g, '');
+                    if (phoneNumber.length > 0) {
+                        chrome.runtime.sendMessage({
+                            action: 'set-number-for-content',
+                            data: phoneNumber
+                        }).then(() => console.log('Sent Number to Buzz*'));
+                        event.preventDefault();
+                    }
+                }
+            });
         }
     });
 
@@ -148,23 +161,5 @@
             }
         }
     }, false);
-
-    document.addEventListener('DOMContentLoaded', () => {
-        if (tel_links) {
-            document.querySelectorAll('a[href^="tel:"]').forEach((elem) => {
-                elem.addEventListener('click', (event) => {
-                    let phoneNumber = this.href.substring(4).replace(/\D/g, '');
-                    if (phoneNumber.length > 0) {
-                        chrome.runtime.sendMessage({
-                            action: 'call',
-                            phoneNumber: phoneNumber
-                        }).then(() => console.log('Sent Number to Buzz*'));
-                        event.preventDefault();
-                        return false;
-                    }
-                });
-            });
-        }
-    });
 
 })();
